@@ -3,8 +3,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const SUPABASE_URL = 'https://xcvicaszlowmnyjrslvp.supabase.co'
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhjdmljYXN6bG93bW55anJzbHZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzMzQyODksImV4cCI6MjA4OTkxMDI4OX0.stR0fXQRO8z2nvnPGQiPSnJtw1dgaT3mMBIaPvtS8y4' // replace with key from Supabase dashboard
-
+const SUPABASE_ANON_KEY = '__SUPABASE_ANON_KEY__'
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 // ─── AUTH ────────────────────────────────────────────────────────────────────

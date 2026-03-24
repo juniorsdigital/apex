@@ -1,0 +1,4 @@
+{
+  "buildCommand": "sed 's/__SUPABASE_ANON_KEY__/$SUPABASE_ANON_KEY/g' shared/apex-supabase.js > shared/apex-supabase.built.js && mv shared/apex-supabase.built.js shared/apex-supabase.js",
+  "outputDirectory": "."
+}
