@@ -4,4 +4,4 @@ export {
   signOut,
   getUser,
   onAuthStateChange
-} from '../shared/apex-supabase.js'
+} from './shared/apex-supabase.js'
