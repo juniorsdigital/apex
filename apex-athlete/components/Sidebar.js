@@ -6,6 +6,7 @@ const NAV_ITEMS = [
   { id: 'progress', label: 'Progress',  icon: 'trending-up' },
   { id: 'messages', label: 'Messages',  icon: 'message-circle' },
   { id: 'profile',  label: 'Profile',   icon: 'user' },
+  { id: 'coach', label: 'My Coach', icon: 'user-check' },
 ]
 
 export function renderSidebar(currentView, navigate) {

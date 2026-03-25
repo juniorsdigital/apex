@@ -8,6 +8,8 @@ import { renderProgress } from './components/ProgressView.js'
 import { renderMessages } from './components/MessagesView.js'
 import { renderProfile } from './components/ProfileView.js'
 import { getWorkoutsForAthlete } from '../shared/apex-supabase.js'
+import { renderCoachProfile } from './components/CoachProfileView.js'
+
 
 const state = {
   user: null,
@@ -51,6 +53,7 @@ async function renderApp() {
     case 'progress': main.appendChild(renderProgress(state)); break
     case 'messages': main.appendChild(renderMessages(state)); break
     case 'profile':  main.appendChild(renderProfile(state)); break
+    case 'coach':    main.appendChild(renderCoachProfile(state)); break
   }
 
   shell.appendChild(main)
