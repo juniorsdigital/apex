@@ -66,7 +66,7 @@ function renderApp() {
   if (window.lucide) window.lucide.createIcons()
 }
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
+// ─── Init (DEV AUTH BYPASS) ──────────────────────────────────────────────────
 async function init() {
   // Load Lucide icons
   const lucideScript = document.createElement('script')
@@ -78,24 +78,17 @@ async function init() {
   chartScript.src = 'https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js'
   document.head.appendChild(chartScript)
 
-  onAuthStateChange(async (event, session) => {
-    state.loading = false
-    if (session?.user) {
-      state.user = session.user
-      // Optionally fetch profile here
-    } else {
-      state.user = null
-      state.profile = null
-    }
-    renderApp()
-  })
-
-  // Initial check
-  const user = await getUser()
-  if (!user) {
-    state.loading = false
-    renderApp()
+  // DEV ONLY: bypass Supabase auth and treat as always logged-in
+  state.user = {
+    id: 'coach-dev-001',
+    email: 'admin@apex.dev'
   }
+  state.profile = {
+    full_name: 'Dev Coach',
+    role: 'coach'
+  }
+  state.loading = false
+  renderApp()
 }
 
 init()

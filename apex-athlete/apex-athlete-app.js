@@ -1,4 +1,4 @@
-import { onAuthStateChange, getUser, getProfile, getWorkoutsForAthlete,supabase } from './shared/apex-supabase.js'
+import { onAuthStateChange, getUser, getProfile, getWorkoutsForAthlete, supabase } from './shared/apex-supabase.js'
 import { renderLogin } from './components/LoginView.js'
 import { renderSidebar } from './components/Sidebar.js'
 import { renderHeader } from './components/Header.js'
@@ -66,19 +66,18 @@ async function loadUserData(userId) {
     getProfile(userId),
     getWorkoutsForAthlete(userId),
     // Find accepted coaching request to get coachId
-    import('./shared/apex-supabase.js').then(m =>
-      m.supabase.from('requests')
-        .select('coach_id')
-        .eq('athlete_id', userId)
-        .eq('status', 'accepted')
-        .maybeSingle()
-    )
+    supabase.from('requests')
+      .select('coach_id')
+      .eq('athlete_id', userId)
+      .eq('status', 'accepted')
+      .maybeSingle()
   ])
   state.profile = profile || null
   state.workouts = workouts || []
   state.coachId = requests?.data?.coach_id || null
 }
 
+// ─── Init (DEV AUTH BYPASS) ──────────────────────────────────────────────────
 async function init() {
   const lucideScript = document.createElement('script')
   lucideScript.src = 'https://unpkg.com/lucide@latest/dist/umd/lucide.min.js'
@@ -88,22 +87,21 @@ async function init() {
   chartScript.src = 'https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js'
   document.head.appendChild(chartScript)
 
-  onAuthStateChange(async (event, session) => {
-    state.loading = false
-    if (session?.user) {
-      state.user = session.user
-      await loadUserData(session.user.id)
-    } else {
-      state.user = null
-      state.profile = null
-      state.workouts = []
-      state.coachId = null
-    }
-    renderApp()
-  })
+  // DEV ONLY: bypass Supabase auth and treat as always logged-in athlete
+  state.user = {
+    id: 'athlete-dev-001',
+    email: 'athlete@apex.dev'
+  }
 
-  const user = await getUser()
-  if (!user) { state.loading = false; renderApp() }
+  // Optionally load any test data for this dev user (will be empty unless you seed it)
+  try {
+    await loadUserData(state.user.id)
+  } catch (e) {
+    console.warn('Dev loadUserData error (safe to ignore in empty DB):', e)
+  }
+
+  state.loading = false
+  renderApp()
 }
 
 init()
