@@ -1,4 +1,4 @@
-import { onAuthStateChange, getUser } from '../shared/apex-supabase.js'
+import { onAuthStateChange, getUser } from './apex-auth.js'
 import { renderLogin } from './components/LoginView.js'
 import { renderSidebar } from './components/Sidebar.js'
 import { renderHeader } from './components/Header.js'
