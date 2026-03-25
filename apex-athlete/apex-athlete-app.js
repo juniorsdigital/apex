@@ -1,4 +1,4 @@
-import { onAuthStateChange, getUser, getProfile, getWorkoutsForAthlete } from './shared/apex-supabase.js'
+import { onAuthStateChange, getUser, getProfile, getWorkoutsForAthlete,supabase } from './shared/apex-supabase.js'
 import { renderLogin } from './components/LoginView.js'
 import { renderSidebar } from './components/Sidebar.js'
 import { renderHeader } from './components/Header.js'
