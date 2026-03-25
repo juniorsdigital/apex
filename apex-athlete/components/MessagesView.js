@@ -1,7 +1,7 @@
 import {
   getConversation, sendMessage, markMessagesRead,
   subscribeToMessages, supabase
-} from './shared/apex-supabase.js'
+} from '../shared/apex-supabase.js'
 
 export function renderMessages(state) {
   const wrap = document.createElement('div')

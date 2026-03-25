@@ -1,4 +1,4 @@
-import { updateWorkoutStatus, supabase } from './shared/apex-supabase.js'
+import { updateWorkoutStatus, supabase } from '../shared/apex-supabase.js'
 
 export function renderToday(state) {
   const today = new Date().toISOString().split('T')[0]
