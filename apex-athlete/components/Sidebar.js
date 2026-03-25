@@ -1,4 +1,4 @@
-import { signOut } from './shared/apex-supabase.js'
+import { signOut } from '../shared/apex-supabase.js'
 
 const NAV_ITEMS = [
   { id: 'today',    label: 'Today',      icon: 'sun' },

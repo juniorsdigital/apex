@@ -1,4 +1,4 @@
-import { buildWeeklyLoads, calcACWR, getACWRStatus } from './shared/apex-data-helpers.js'
+import { buildWeeklyLoads, calcACWR, getACWRStatus } from '../shared/apex-data-helpers.js'
 
 export function renderProgress(state) {
   const workouts = state.workouts || []
