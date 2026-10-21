@@ -144,10 +144,13 @@ export function createCloudStore(user) {
 
     async saveProfile(updates) {
       const sb = await getClient()
-      const { data, error } = await sb.from('profiles')
-        .upsert({ id: uid, ...updates, updated_at: new Date().toISOString() })
-        .select()
-        .single()
+      const row = { ...updates, updated_at: new Date().toISOString() }
+      // The signup trigger normally creates the profile row, so update it;
+      // insert only if it's missing (e.g. a fresh project from schema.sql).
+      let { data, error } = await sb.from('profiles').update(row).eq('id', uid).select().maybeSingle()
+      if (!error && !data) {
+        ({ data, error } = await sb.from('profiles').insert({ id: uid, ...row }).select().single())
+      }
       return { data, error }
     },
 
