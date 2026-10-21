@@ -3,7 +3,7 @@
 -- Every table is private to its owner via row level security.
 
 create table if not exists public.profiles (
-  user_id     uuid primary key references auth.users (id) on delete cascade,
+  id          uuid primary key references auth.users (id) on delete cascade,
   full_name   text,
   ftp_watts   integer check (ftp_watts between 0 and 1000),
   weight_kg   numeric(5, 1) check (weight_kg between 0 and 300),
@@ -51,8 +51,8 @@ alter table public.readiness enable row level security;
 drop policy if exists "own profile" on public.profiles;
 create policy "own profile" on public.profiles
   for all to authenticated
-  using ((select auth.uid()) = user_id)
-  with check ((select auth.uid()) = user_id);
+  using ((select auth.uid()) = id)
+  with check ((select auth.uid()) = id);
 
 drop policy if exists "own rides" on public.rides;
 create policy "own rides" on public.rides

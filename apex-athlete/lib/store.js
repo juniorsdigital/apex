@@ -102,7 +102,7 @@ export function createCloudStore(user) {
       const since = new Date()
       since.setDate(since.getDate() - 60)
       const [profile, rides, readiness] = await Promise.all([
-        sb.from('profiles').select('*').eq('user_id', uid).maybeSingle(),
+        sb.from('profiles').select('*').eq('id', uid).maybeSingle(),
         sb.from('rides').select('*').eq('user_id', uid).order('ride_date'),
         sb.from('readiness').select('*').eq('user_id', uid).gte('check_date', since.toISOString().slice(0, 10))
       ])
@@ -145,7 +145,7 @@ export function createCloudStore(user) {
     async saveProfile(updates) {
       const sb = await getClient()
       const { data, error } = await sb.from('profiles')
-        .upsert({ user_id: uid, ...updates, updated_at: new Date().toISOString() })
+        .upsert({ id: uid, ...updates, updated_at: new Date().toISOString() })
         .select()
         .single()
       return { data, error }
