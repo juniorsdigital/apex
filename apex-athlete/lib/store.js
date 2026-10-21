@@ -102,7 +102,7 @@ export function createCloudStore(user) {
       const since = new Date()
       since.setDate(since.getDate() - 60)
       const [profile, rides, readiness] = await Promise.all([
-        sb.from('profiles').select('*').eq('user_id', uid).maybeSingle(),
+        sb.from('profiles').select('*').eq('id', uid).maybeSingle(),
         sb.from('rides').select('*').eq('user_id', uid).order('ride_date'),
         sb.from('readiness').select('*').eq('user_id', uid).gte('check_date', since.toISOString().slice(0, 10))
       ])
@@ -144,10 +144,13 @@ export function createCloudStore(user) {
 
     async saveProfile(updates) {
       const sb = await getClient()
-      const { data, error } = await sb.from('profiles')
-        .upsert({ user_id: uid, ...updates, updated_at: new Date().toISOString() })
-        .select()
-        .single()
+      const row = { ...updates, updated_at: new Date().toISOString() }
+      // The signup trigger normally creates the profile row, so update it;
+      // insert only if it's missing (e.g. a fresh project from schema.sql).
+      let { data, error } = await sb.from('profiles').update(row).eq('id', uid).select().maybeSingle()
+      if (!error && !data) {
+        ({ data, error } = await sb.from('profiles').insert({ id: uid, ...row }).select().single())
+      }
       return { data, error }
     },
 
