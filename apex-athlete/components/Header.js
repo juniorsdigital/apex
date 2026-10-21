@@ -1,14 +1,25 @@
-const VIEW_TITLES = {
-  today: 'Today', calendar: 'Schedule', progress: 'My Progress',
-  messages: 'Messages', profile: 'Profile & Settings'
-}
-export function renderHeader(currentView, user, profile) {
+import { navigate } from '../app.js'
+import { esc } from '../lib/util.js'
+import { NAV_ITEMS, LOGO_SVG } from './Sidebar.js'
+
+export function renderHeader(state) {
   const h = document.createElement('header')
   h.className = 'app-header'
-  const name = profile?.full_name || user?.email?.split('@')[0] || 'Athlete'
+  const title = NAV_ITEMS.find(n => n.id === state.currentView)?.label || 'Today'
+  const name = state.profile?.full_name || state.user?.email || ''
+
   h.innerHTML = `
-    <h1 style="font-size:var(--text-base);font-weight:600">${VIEW_TITLES[currentView] || 'Apex Athlete'}</h1>
-    <span style="font-size:var(--text-sm);color:var(--color-text-muted)">${name}</span>
+    <div class="header-title">
+      <span class="header-logo">${LOGO_SVG}</span>
+      <h1>${title}</h1>
+    </div>
+    ${state.user
+      ? `<span class="muted small" title="Signed in">${esc(name)}</span>`
+      : `<div class="header-guest">
+           <span class="badge badge-muted">Guest · saved on this device</span>
+           <button class="btn btn-primary btn-sm" id="header-signin">Sign in</button>
+         </div>`}
   `
+  h.querySelector('#header-signin')?.addEventListener('click', () => navigate('login'))
   return h
 }

@@ -1,390 +1,209 @@
-import { updateWorkoutStatus, supabase } from '../shared/apex-supabase.js'
+// Today dashboard — available to guests and signed-in riders alike.
+import { navigate, reload, saveRide } from '../app.js'
+import { guestDataCount } from '../lib/store.js'
+import { rideType, rideLoad, isDone, sum } from '../lib/metrics.js'
+import { esc, dateKey, addDays, startOfWeek, formatDate, formatDuration } from '../lib/util.js'
+import { openRideForm } from './RideForm.js'
+
+const READINESS = [
+  { id: 'sleep',    label: 'Sleep',     icon: 'moon',     low: 'Poor',  high: 'Great' },
+  { id: 'energy',   label: 'Energy',    icon: 'zap',      low: 'Flat',  high: 'Fresh' },
+  { id: 'soreness', label: 'Legs',      icon: 'activity', low: 'Sore',  high: 'Fresh' }
+]
 
 export function renderToday(state) {
-  const today = new Date().toISOString().split('T')[0]
-  const todayWorkouts = (state.workouts || []).filter(w => w.workout_date === today)
+  const today = dateKey()
+  const todayRides = state.rides.filter(r => r.ride_date === today)
+  const readiness = state.readiness[today] || {}
+  const weekStart = startOfWeek()
+  const weekDays = Array.from({ length: 7 }, (_, i) => dateKey(addDays(weekStart, i)))
+  const weekRides = state.rides.filter(r => r.ride_date >= weekDays[0] && r.ride_date <= weekDays[6])
+  const weekDone = weekRides.filter(isDone)
+  const upNext = state.rides.find(r => r.ride_date > today && r.status === 'planned')
+  const importable = state.user ? guestDataCount() : 0
+  const firstName = state.profile?.full_name?.split(' ')[0]
+
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+
   const wrap = document.createElement('div')
-
-  const greeting = () => {
-    const h = new Date().getHours()
-    if (h < 12) return 'Good morning'
-    if (h < 17) return 'Good afternoon'
-    return 'Good evening'
-  }
-
+  wrap.className = 'stack'
   wrap.innerHTML = `
-    <div style="margin-bottom:var(--space-6)">
-      <h1 style="font-size:var(--text-lg);font-weight:700">
-        ${greeting()}${state.profile?.full_name ? ', ' + state.profile.full_name.split(' ')[0] : ''}
-      </h1>
-      <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-top:var(--space-1)">
-        ${new Date().toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' })}
-      </p>
-    </div>
-
-    <!-- Readiness Check -->
-    <div class="card" style="margin-bottom:var(--space-4)">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4)">
-        <h2 style="font-size:var(--text-sm);font-weight:600">Readiness Check</h2>
-        <span style="font-size:var(--text-xs);color:var(--color-text-faint)">Tap to rate 1–5</span>
+    <div class="page-head">
+      <div>
+        <h2 class="page-title">${greeting}${firstName ? ', ' + esc(firstName) : ''}</h2>
+        <p class="muted small">${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</p>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-4)">
-        ${[
-          { id: 'sleep',  label: 'Sleep Quality', icon: 'moon' },
-          { id: 'energy', label: 'Energy Level',  icon: 'zap' },
-          { id: 'soreness', label: 'Muscle Soreness', icon: 'activity' }
-        ].map(m => `
-          <div>
-            <div style="display:flex;align-items:center;gap:var(--space-1);margin-bottom:var(--space-2)">
-              <i data-lucide="${m.icon}" style="width:12px;height:12px;color:var(--color-text-faint)"></i>
-              <span style="font-size:var(--text-xs);color:var(--color-text-muted)">${m.label}</span>
-            </div>
-            <div style="display:flex;gap:4px" data-metric="${m.id}">
-              ${[1,2,3,4,5].map(n => `
-                <button
-                  class="readiness-btn"
-                  data-metric="${m.id}" data-val="${n}"
-                  aria-label="${m.label} ${n}"
-                  style="
-                    flex:1;height:28px;border-radius:var(--radius-sm);
-                    border:1px solid var(--color-border);
-                    background:var(--color-surface-offset);
-                    color:var(--color-text-faint);
-                    font-size:10px;font-weight:600;cursor:pointer;
-                    transition:background var(--transition),color var(--transition),border-color var(--transition)
-                  "
-                >${n}</button>
-              `).join('')}
-            </div>
-          </div>
-        `).join('')}
+      <div class="row">
+        <button class="btn btn-ghost" id="plan-btn"><i data-lucide="calendar-plus" class="icon-sm"></i> Plan</button>
+        <button class="btn btn-primary" id="log-btn"><i data-lucide="plus" class="icon-sm"></i> Log ride</button>
       </div>
     </div>
 
-    <!-- Today's Sessions -->
-    <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4)">
-        <h2 style="font-size:var(--text-sm);font-weight:600">
-          ${todayWorkouts.length > 0
-            ? `${todayWorkouts.length} Session${todayWorkouts.length > 1 ? 's' : ''} Today`
-            : "Today's Sessions"}
-        </h2>
-        ${todayWorkouts.length > 0 ? `
-          <span style="font-size:var(--text-xs);color:var(--color-text-faint)">
-            ${todayWorkouts.filter(w => w.status === 'completed').length}/${todayWorkouts.length} done
-          </span>
-        ` : ''}
-      </div>
+    ${importable ? `
+      <div class="alert alert-info row-between">
+        <span>You logged ${importable} ride${importable > 1 ? 's' : ''} on this device before signing in.</span>
+        <button class="btn btn-primary btn-sm" id="import-btn">Add to my account</button>
+      </div>` : ''}
 
-      ${todayWorkouts.length === 0 ? `
-        <div style="text-align:center;padding:var(--space-10) var(--space-6)">
-          <i data-lucide="coffee" style="width:40px;height:40px;color:var(--color-text-faint);margin:0 auto var(--space-3)"></i>
-          <p style="font-size:var(--text-sm);color:var(--color-text-muted)">Rest day — no sessions scheduled.</p>
-          <p style="font-size:var(--text-xs);color:var(--color-text-faint);margin-top:var(--space-1)">Recovery is part of training. Check your schedule for tomorrow.</p>
-        </div>
+    <section class="card">
+      <div class="card-head">
+        <h3>Today's riding</h3>
+        ${todayRides.length ? `<span class="faint small">${todayRides.filter(isDone).length}/${todayRides.length} done</span>` : ''}
+      </div>
+      ${todayRides.length ? `
+        <div class="stack-sm">${todayRides.map(rideCard).join('')}</div>
       ` : `
-        <div style="display:flex;flex-direction:column;gap:var(--space-3)" id="workout-list">
-          ${todayWorkouts.map(wo => renderWorkoutCard(wo, state.user)).join('')}
+        <div class="empty">
+          <i data-lucide="bike" class="icon-lg"></i>
+          <p>Nothing logged yet today.</p>
+          <p class="faint small">Log a ride when you're back, or plan one for later.</p>
         </div>
       `}
+    </section>
+
+    <div class="grid-2">
+      <section class="card">
+        <div class="card-head">
+          <h3>How are you feeling?</h3>
+          <span class="faint small" id="readiness-score">${readinessScore(readiness)}</span>
+        </div>
+        <div class="stack-sm">
+          ${READINESS.map(m => `
+            <div class="readiness-row">
+              <span class="readiness-label"><i data-lucide="${m.icon}" class="icon-xs"></i> ${m.label}</span>
+              <div class="readiness-scale" role="radiogroup" aria-label="${m.label}">
+                ${[1,2,3,4,5].map(n => `
+                  <button class="readiness-btn ${readiness[m.id] >= n ? 'on' : ''}" data-metric="${m.id}" data-val="${n}"
+                    role="radio" aria-checked="${readiness[m.id] === n}" aria-label="${m.label} ${n} of 5">${n}</button>
+                `).join('')}
+              </div>
+            </div>
+          `).join('')}
+          <div class="row-between faint small"><span>1 = rough</span><span>5 = great</span></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h3>This week</h3>
+          <span class="faint small">${formatDate(weekDays[0], { month: 'short', day: 'numeric' })} – ${formatDate(weekDays[6], { month: 'short', day: 'numeric' })}</span>
+        </div>
+        <div class="week-strip">
+          ${weekDays.map(d => {
+            const rides = weekRides.filter(r => r.ride_date === d)
+            const cls = rides.some(isDone) ? 'done' : rides.some(r => r.status === 'planned') ? 'planned' : ''
+            return `
+              <div class="week-day ${d === today ? 'today' : ''}">
+                <span class="faint">${formatDate(d, { weekday: 'narrow' })}</span>
+                <span class="week-dot ${cls}" title="${rides.map(r => esc(r.title || rideType(r.ride_type).label)).join(', ')}"></span>
+              </div>`
+          }).join('')}
+        </div>
+        <div class="stat-grid">
+          ${stat('Rides', weekDone.length)}
+          ${stat('Time', formatDuration(sum(weekDone, 'duration_min')))}
+          ${stat('Distance', `${Math.round(sum(weekDone, 'distance_km'))} km`)}
+          ${stat('Load', weekDone.reduce((a, r) => a + rideLoad(r), 0).toLocaleString())}
+        </div>
+        ${upNext ? `
+          <div class="up-next">
+            <span class="faint small">Up next · ${formatDate(upNext.ride_date)}</span>
+            <span>${esc(upNext.title || rideType(upNext.ride_type).label)}${upNext.duration_min ? ` · ${formatDuration(upNext.duration_min)}` : ''}</span>
+          </div>` : ''}
+      </section>
     </div>
 
-    <!-- Workout modal container -->
-    <div id="workout-modal"></div>
+    ${!state.user ? `
+      <section class="card guest-cta row-between">
+        <div>
+          <h3>Keep your history</h3>
+          <p class="muted small">You're in guest mode, so rides are saved only in this browser. Sign in to sync them and to use the calendar, ride log and progress charts.</p>
+        </div>
+        <button class="btn btn-primary" id="cta-signin">Sign in</button>
+      </section>` : ''}
   `
 
-  // Readiness dot interactions
+  wrap.querySelector('#log-btn').addEventListener('click', () => openRideForm({ status: 'completed' }))
+  wrap.querySelector('#plan-btn').addEventListener('click', () => openRideForm({ status: 'planned' }))
+  wrap.querySelector('#cta-signin')?.addEventListener('click', () => navigate('login'))
+
+  wrap.querySelector('#import-btn')?.addEventListener('click', async (e) => {
+    e.target.disabled = true
+    e.target.textContent = 'Importing…'
+    const { error } = await state.store.importGuestData()
+    if (error) { e.target.textContent = 'Import failed'; alert(error.message); return }
+    await reload()
+  })
+
+  // Readiness — saves on every tap.
   wrap.querySelectorAll('.readiness-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const metric = btn.dataset.metric
-      const val = parseInt(btn.dataset.val)
-      wrap.querySelectorAll(`.readiness-btn[data-metric="${metric}"]`).forEach(b => {
-        const bVal = parseInt(b.dataset.val)
-        const active = bVal <= val
-        b.style.background = active ? 'var(--color-primary)' : 'var(--color-surface-offset)'
-        b.style.color = active ? 'var(--color-text-inverse)' : 'var(--color-text-faint)'
-        b.style.borderColor = active ? 'var(--color-primary)' : 'var(--color-border)'
+    btn.addEventListener('click', async () => {
+      const values = { ...state.readiness[today], [btn.dataset.metric]: Number(btn.dataset.val) }
+      state.readiness[today] = values
+      wrap.querySelectorAll(`.readiness-btn[data-metric="${btn.dataset.metric}"]`).forEach(b => {
+        b.classList.toggle('on', Number(b.dataset.val) <= values[btn.dataset.metric])
+        b.setAttribute('aria-checked', String(b === btn))
       })
+      wrap.querySelector('#readiness-score').textContent = readinessScore(values)
+      await state.store.saveReadiness(today, values)
     })
   })
 
-  // Mark done → open RPE logging modal
+  // Ride card actions
   wrap.addEventListener('click', async (e) => {
-    const doneBtn = e.target.closest('.mark-done-btn')
-    const skipBtn = e.target.closest('.skip-btn')
-    const detailBtn = e.target.closest('.detail-btn')
-
-    if (detailBtn) {
-      const wo = todayWorkouts.find(w => w.id === detailBtn.dataset.id)
-      if (wo) showWorkoutModal(wo, state, wrap)
-    }
-
-    if (doneBtn) {
-      const wo = todayWorkouts.find(w => w.id === doneBtn.dataset.id)
-      if (wo) showRpeModal(wo, state, wrap)
-    }
-
-    if (skipBtn) {
-      const { error } = await updateWorkoutStatus(skipBtn.dataset.id, 'skipped')
-      if (!error) {
-        const wo = state.workouts.find(w => w.id === skipBtn.dataset.id)
-        if (wo) wo.status = 'skipped'
-        const card = wrap.querySelector(`[data-workout-id="${skipBtn.dataset.id}"]`)
-        if (card) card.style.opacity = '0.4'
-      }
-    }
+    const card = e.target.closest('[data-ride-id]')
+    if (!card) return
+    const ride = state.rides.find(r => r.id === card.dataset.rideId)
+    const action = e.target.closest('[data-action]')?.dataset.action
+    if (action === 'done') openRideForm({ ride: { ...ride, status: 'completed' } })
+    else if (action === 'skip') await saveRide({ ...ride, status: 'skipped' })
+    else openRideForm({ ride })
   })
 
   return wrap
 }
 
-function renderWorkoutCard(wo, user) {
-  const statusColor = {
-    completed: 'var(--color-success)',
-    skipped: 'var(--color-error)',
-    in_progress: 'var(--color-gold)',
-    assigned: 'var(--color-primary)'
-  }[wo.status] || 'var(--color-primary)'
+function readinessScore(r) {
+  const vals = READINESS.map(m => r[m.id]).filter(Boolean)
+  if (vals.length < READINESS.length) return 'Tap to rate'
+  const avg = vals.reduce((a, b) => a + b, 0) / vals.length
+  if (avg >= 4) return 'Ready to push'
+  if (avg >= 3) return 'Good to train'
+  if (avg >= 2) return 'Keep it easy'
+  return 'Consider resting'
+}
+
+function stat(label, value) {
+  return `<div class="stat"><span class="faint small">${label}</span><span class="kpi-value stat-value">${value}</span></div>`
+}
+
+export function rideCard(r) {
+  const type = rideType(r.ride_type)
+  const details = [
+    r.duration_min && formatDuration(r.duration_min),
+    r.distance_km && `${Number(r.distance_km).toLocaleString()} km`,
+    r.elevation_m && `${Number(r.elevation_m).toLocaleString()} m ↑`,
+    r.avg_power_w && `${r.avg_power_w} W`,
+    r.avg_hr && `${r.avg_hr} bpm`,
+    r.rpe && `RPE ${r.rpe}`
+  ].filter(Boolean)
 
   return `
-    <div
-      class="card card-sm"
-      data-workout-id="${wo.id}"
-      style="background:var(--color-surface-offset);opacity:${wo.status === 'skipped' ? '0.4' : '1'}"
-    >
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-3)">
-        <div style="flex:1;min-width:0">
-          <div style="display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-1)">
-            <span style="width:8px;height:8px;border-radius:50%;background:${statusColor};flex-shrink:0"></span>
-            <span style="font-size:var(--text-sm);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${wo.title || 'Training Session'}</span>
-          </div>
-          <div style="display:flex;flex-wrap:wrap;gap:var(--space-3);margin-top:var(--space-2)">
-            ${wo.duration_minutes ? `<span style="font-size:var(--text-xs);color:var(--color-text-muted)">⏱ ${wo.duration_minutes} min</span>` : ''}
-            ${wo.type ? `<span style="font-size:var(--text-xs);color:var(--color-primary);text-transform:capitalize">${wo.type}</span>` : ''}
-            ${wo.rpe ? `<span style="font-size:var(--text-xs);color:var(--color-text-muted)">RPE ${wo.rpe} · ${(wo.rpe * (wo.duration_minutes || 0)).toLocaleString()} AU</span>` : ''}
-          </div>
+    <div class="ride-card status-${r.status}" data-ride-id="${r.id}" role="button" tabindex="0" style="--type-color:${type.color}">
+      <div class="ride-main">
+        <div class="ride-title">${esc(r.title || type.label)}</div>
+        <div class="ride-meta">
+          <span class="type-chip">${type.label}</span>
+          ${details.map(d => `<span>${d}</span>`).join('')}
         </div>
-        <div style="display:flex;gap:var(--space-2);flex-shrink:0;align-items:center">
-          ${wo.status === 'completed'
-            ? `<span class="badge badge-success">✓ Done</span>`
-            : wo.status === 'skipped'
-            ? `<span class="badge badge-error">Skipped</span>`
-            : `
-              <button class="btn btn-ghost detail-btn" data-id="${wo.id}" style="font-size:var(--text-xs);padding:var(--space-2) var(--space-3)">
-                Details
-              </button>
-              <button class="btn btn-primary mark-done-btn" data-id="${wo.id}" style="font-size:var(--text-xs);padding:var(--space-2) var(--space-3)">
-                Log Done
-              </button>
-              <button class="btn btn-ghost skip-btn" data-id="${wo.id}" style="font-size:var(--text-xs);padding:var(--space-2) var(--space-3)">
-                Skip
-              </button>
-            `
-          }
-        </div>
+        ${r.notes ? `<div class="ride-notes">${esc(r.notes)}</div>` : ''}
       </div>
-      ${wo.notes ? `
-        <div style="margin-top:var(--space-3);padding:var(--space-3);background:var(--color-surface);border-radius:var(--radius-sm);font-size:var(--text-xs);color:var(--color-text-muted);border-left:2px solid var(--color-primary)">
-          <strong style="color:var(--color-primary)">Coach notes:</strong> ${wo.notes}
-        </div>
-      ` : ''}
-    </div>
-  `
-}
-
-function showRpeModal(wo, state, wrap) {
-  const overlay = document.createElement('div')
-  overlay.style.cssText = 'position:fixed;inset:0;background:oklch(0 0 0/0.6);display:flex;align-items:center;justify-content:center;z-index:100;padding:var(--space-6)'
-  overlay.innerHTML = `
-    <div class="card" style="width:100%;max-width:400px;padding:var(--space-8)">
-      <h2 style="font-size:var(--text-base);font-weight:700;margin-bottom:var(--space-2)">Log Session</h2>
-      <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-6)">${wo.title}</p>
-
-      <div style="margin-bottom:var(--space-5)">
-        <label style="display:block;font-size:var(--text-sm);font-weight:500;margin-bottom:var(--space-3)">
-          Session RPE <span style="color:var(--color-text-faint);font-weight:400">(1 = very easy, 10 = maximal)</span>
-        </label>
-        <div style="display:flex;gap:var(--space-2)" id="rpe-buttons">
-          ${[1,2,3,4,5,6,7,8,9,10].map(n => `
-            <button
-              class="rpe-btn"
-              data-val="${n}"
-              style="
-                flex:1;height:40px;border-radius:var(--radius-sm);
-                border:1px solid var(--color-border);
-                background:var(--color-surface-offset);
-                color:var(--color-text-muted);font-size:var(--text-xs);
-                font-weight:700;cursor:pointer;
-                transition:background var(--transition),color var(--transition)
-              "
-            >${n}</button>
-          `).join('')}
-        </div>
-        <div id="rpe-label" style="font-size:var(--text-xs);color:var(--color-text-faint);margin-top:var(--space-2);text-align:center;min-height:1.2em"></div>
+      <div class="ride-actions">
+        ${r.status === 'completed' ? `<span class="badge badge-success">Done</span>`
+          : r.status === 'skipped' ? `<span class="badge badge-error">Skipped</span>`
+          : `<button class="btn btn-ghost btn-sm" data-action="skip">Skip</button>
+             <button class="btn btn-primary btn-sm" data-action="done">Mark done</button>`}
       </div>
-
-      <div style="margin-bottom:var(--space-5)">
-        <label style="display:block;font-size:var(--text-sm);font-weight:500;margin-bottom:var(--space-2)">
-          Actual duration <span style="color:var(--color-text-faint);font-weight:400">(minutes)</span>
-        </label>
-        <input
-          id="actual-duration"
-          type="number"
-          class="input"
-          value="${wo.duration_minutes || ''}"
-          placeholder="${wo.duration_minutes || 60}"
-          min="1" max="480"
-        >
-      </div>
-
-      <div id="load-preview" style="display:none;padding:var(--space-3);background:var(--color-primary-highlight);border-radius:var(--radius-md);margin-bottom:var(--space-5);text-align:center">
-        <span style="font-size:var(--text-xs);color:var(--color-text-muted)">Session load: </span>
-        <span id="load-value" class="kpi-value" style="font-size:var(--text-base);color:var(--color-primary)"></span>
-        <span style="font-size:var(--text-xs);color:var(--color-text-muted)"> AU (sRPE × min)</span>
-      </div>
-
-      <div id="rpe-error" style="display:none;color:var(--color-error);font-size:var(--text-sm);margin-bottom:var(--space-3)"></div>
-
-      <div style="display:flex;gap:var(--space-3)">
-        <button class="btn btn-ghost" id="rpe-cancel" style="flex:1;justify-content:center">Cancel</button>
-        <button class="btn btn-primary" id="rpe-submit" disabled style="flex:1;justify-content:center">Save session</button>
-      </div>
-    </div>
-  `
-
-  const RPE_LABELS = {
-    1: 'Rest / very light', 2: 'Easy', 3: 'Moderate', 4: 'Somewhat hard',
-    5: 'Hard', 6: 'Hard+', 7: 'Very hard', 8: 'Very hard+',
-    9: 'Near maximal', 10: 'Maximal effort'
-  }
-
-  let selectedRpe = null
-
-  overlay.querySelectorAll('.rpe-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      selectedRpe = parseInt(btn.dataset.val)
-      overlay.querySelectorAll('.rpe-btn').forEach(b => {
-        const active = parseInt(b.dataset.val) === selectedRpe
-        b.style.background = active ? 'var(--color-primary)' : 'var(--color-surface-offset)'
-        b.style.color = active ? 'var(--color-text-inverse)' : 'var(--color-text-muted)'
-        b.style.borderColor = active ? 'var(--color-primary)' : 'var(--color-border)'
-      })
-      overlay.querySelector('#rpe-label').textContent = RPE_LABELS[selectedRpe]
-      updateLoadPreview()
-      overlay.querySelector('#rpe-submit').disabled = false
-    })
-  })
-
-  function updateLoadPreview() {
-    const dur = parseInt(overlay.querySelector('#actual-duration').value) || wo.duration_minutes || 0
-    if (selectedRpe && dur) {
-      const load = selectedRpe * dur
-      overlay.querySelector('#load-preview').style.display = 'block'
-      overlay.querySelector('#load-value').textContent = load.toLocaleString()
-    }
-  }
-
-  overlay.querySelector('#actual-duration').addEventListener('input', updateLoadPreview)
-  overlay.querySelector('#rpe-cancel').addEventListener('click', () => overlay.remove())
-  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove() })
-
-  overlay.querySelector('#rpe-submit').addEventListener('click', async () => {
-    if (!selectedRpe) return
-    const duration = parseInt(overlay.querySelector('#actual-duration').value) || wo.duration_minutes
-    const submitBtn = overlay.querySelector('#rpe-submit')
-    submitBtn.disabled = true
-    submitBtn.textContent = 'Saving…'
-
-    const { error } = await supabase
-      .from('workouts')
-      .update({
-        status: 'completed',
-        rpe: selectedRpe,
-        duration_minutes: duration,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', wo.id)
-
-    if (error) {
-      overlay.querySelector('#rpe-error').style.display = 'block'
-      overlay.querySelector('#rpe-error').textContent = error.message
-      submitBtn.disabled = false
-      submitBtn.textContent = 'Save session'
-    } else {
-      const w = state.workouts.find(w => w.id === wo.id)
-      if (w) { w.status = 'completed'; w.rpe = selectedRpe; w.duration_minutes = duration }
-      overlay.remove()
-      // Refresh the workout card inline
-      const card = wrap.querySelector(`[data-workout-id="${wo.id}"]`)
-      if (card) card.outerHTML = renderWorkoutCard({ ...wo, status: 'completed', rpe: selectedRpe, duration_minutes: duration })
-    }
-  })
-
-  document.body.appendChild(overlay)
-  if (window.lucide) window.lucide.createIcons()
-}
-
-function showWorkoutModal(wo, state, wrap) {
-  const overlay = document.createElement('div')
-  overlay.style.cssText = 'position:fixed;inset:0;background:oklch(0 0 0/0.6);display:flex;align-items:center;justify-content:center;z-index:100;padding:var(--space-6)'
-  overlay.innerHTML = `
-    <div class="card" style="width:100%;max-width:480px;padding:var(--space-8);max-height:80dvh;overflow-y:auto">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-5)">
-        <h2 style="font-size:var(--text-base);font-weight:700">${wo.title || 'Session Details'}</h2>
-        <button id="detail-close" class="btn btn-ghost" style="padding:var(--space-2)">✕</button>
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);margin-bottom:var(--space-5)">
-        <div style="padding:var(--space-3);background:var(--color-surface-offset);border-radius:var(--radius-md)">
-          <div style="font-size:var(--text-xs);color:var(--color-text-muted);margin-bottom:2px">Duration</div>
-          <div style="font-size:var(--text-sm);font-weight:600">${wo.duration_minutes ? wo.duration_minutes + ' min' : '—'}</div>
-        </div>
-        <div style="padding:var(--space-3);background:var(--color-surface-offset);border-radius:var(--radius-md)">
-          <div style="font-size:var(--text-xs);color:var(--color-text-muted);margin-bottom:2px">Type</div>
-          <div style="font-size:var(--text-sm);font-weight:600;text-transform:capitalize">${wo.type || '—'}</div>
-        </div>
-        <div style="padding:var(--space-3);background:var(--color-surface-offset);border-radius:var(--radius-md)">
-          <div style="font-size:var(--text-xs);color:var(--color-text-muted);margin-bottom:2px">Status</div>
-          <div style="font-size:var(--text-sm);font-weight:600;text-transform:capitalize">${wo.status || 'assigned'}</div>
-        </div>
-        <div style="padding:var(--space-3);background:var(--color-surface-offset);border-radius:var(--radius-md)">
-          <div style="font-size:var(--text-xs);color:var(--color-text-muted);margin-bottom:2px">Load Target</div>
-          <div style="font-size:var(--text-sm);font-weight:600">${wo.duration_minutes ? (5 * wo.duration_minutes).toLocaleString() + ' AU est.' : '—'}</div>
-        </div>
-      </div>
-
-      ${wo.description ? `
-        <div style="margin-bottom:var(--space-4)">
-          <div style="font-size:var(--text-xs);color:var(--color-text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:var(--space-2)">Description</div>
-          <p style="font-size:var(--text-sm);color:var(--color-text)">${wo.description}</p>
-        </div>
-      ` : ''}
-
-      ${wo.notes ? `
-        <div style="padding:var(--space-4);background:var(--color-primary-highlight);border-radius:var(--radius-md);border-left:3px solid var(--color-primary);margin-bottom:var(--space-5)">
-          <div style="font-size:var(--text-xs);color:var(--color-primary);font-weight:700;margin-bottom:var(--space-2)">COACH NOTES</div>
-          <p style="font-size:var(--text-sm);color:var(--color-text)">${wo.notes}</p>
-        </div>
-      ` : ''}
-
-      ${wo.status !== 'completed' && wo.status !== 'skipped' ? `
-        <button class="btn btn-primary log-from-detail" data-id="${wo.id}" style="width:100%;justify-content:center">
-          Log this session
-        </button>
-      ` : ''}
-    </div>
-  `
-
-  overlay.querySelector('#detail-close').addEventListener('click', () => overlay.remove())
-  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove() })
-
-  const logBtn = overlay.querySelector('.log-from-detail')
-  if (logBtn) {
-    logBtn.addEventListener('click', () => {
-      overlay.remove()
-      showRpeModal(wo, state, wrap)
-    })
-  }
-
-  document.body.appendChild(overlay)
+    </div>`
 }
