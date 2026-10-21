@@ -1,161 +1,158 @@
-import { buildWeeklyLoads, calcACWR, getACWRStatus } from '../shared/apex-data-helpers.js'
+// Progress — weekly volume, training load and ACWR, ride mix, goal countdown.
+import { weeklySummary, acwrOn, acwrStatus, rideType, isDone, sum, estimatedTss } from '../lib/metrics.js'
+import { esc, dateKey, addDays, parseKey, formatDuration } from '../lib/util.js'
+
+const charts = []
 
 export function renderProgress(state) {
-  const workouts = state.workouts || []
-  const weeklyLoads = buildWeeklyLoads(workouts, 8)
-  const dailyLoads = workouts.map(w => (w.rpe || 5) * (w.duration_minutes || 0))
-  const acwr = calcACWR(dailyLoads.length >= 28 ? dailyLoads : new Array(28).fill(0))
-  const acwrStatus = getACWRStatus(acwr)
+  const weeks = weeklySummary(state.rides, 12)
+  const thisWeek = weeks[weeks.length - 1]
+  const prior4 = weeks.slice(-5, -1)
+  const avgMinutes = sum(prior4, 'minutes') / 4
+  const acwr = acwrOn(state.rides)
+  const status = acwrStatus(acwr)
+  const ftp = Number(state.profile?.ftp_watts) || null
 
-  const completed = workouts.filter(w => w.status === 'completed').length
-  const total = workouts.filter(w => w.status !== 'skipped').length
-  const complianceRate = total > 0 ? Math.round((completed / total) * 100) : 0
-  const thisWeekLoad = weeklyLoads.length ? weeklyLoads[weeklyLoads.length - 1].load : 0
+  const since = dateKey(addDays(new Date(), -56))
+  const recent = state.rides.filter(r => isDone(r) && r.ride_date >= since)
+  const mix = {}
+  for (const r of recent) mix[r.ride_type] = (mix[r.ride_type] || 0) + (Number(r.duration_min) || 0)
+  const mixTotal = Object.values(mix).reduce((a, b) => a + b, 0)
+  const tssRides = recent.map(r => estimatedTss(r, ftp)).filter(v => v !== null)
 
-  // Phase progress — derive from workouts date range
-  const sortedDates = workouts.map(w => w.workout_date).sort()
-  const firstDate = sortedDates[0] ? new Date(sortedDates[0]) : new Date()
-  const weeksSinceStart = Math.max(1, Math.floor((new Date() - firstDate) / (7 * 24 * 60 * 60 * 1000)))
-  const phaseWeeks = 12
-  const phaseProgress = Math.min(weeksSinceStart, phaseWeeks)
+  const goal = state.profile?.goal_event && state.profile?.goal_date ? state.profile : null
+  const daysToGoal = goal ? Math.ceil((parseKey(goal.goal_date) - parseKey(dateKey())) / 86400000) : null
 
   const wrap = document.createElement('div')
+  wrap.className = 'stack'
   wrap.innerHTML = `
-    <div style="margin-bottom:var(--space-6)">
-      <h1 style="font-size:var(--text-lg);font-weight:700">My Progress</h1>
-      <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-top:var(--space-1)">Training load, ACWR, and compliance trends</p>
+    <div class="page-head">
+      <div>
+        <h2 class="page-title">Progress</h2>
+        <p class="muted small">Last 12 weeks of riding</p>
+      </div>
+      ${goal && daysToGoal >= 0 ? `
+        <div class="goal-pill">
+          <span class="kpi-value">${daysToGoal}</span>
+          <span class="small">days to ${esc(goal.goal_event)}</span>
+        </div>` : ''}
     </div>
 
-    <!-- KPI row -->
-    <div class="kpi-row" style="margin-bottom:var(--space-4)">
-      <div class="card card-sm" style="border-top:2px solid var(--color-primary)">
-        <div style="font-size:var(--text-xs);color:var(--color-text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:var(--space-2)">Compliance</div>
-        <div class="kpi-value" style="font-size:var(--text-xl);color:var(--color-primary)">${complianceRate}%</div>
-        <div style="font-size:var(--text-xs);color:var(--color-text-muted);margin-top:var(--space-1)">${completed} of ${total} sessions done</div>
-      </div>
-      <div class="card card-sm" style="border-top:2px solid ${acwrStatus.color}">
-        <div style="font-size:var(--text-xs);color:var(--color-text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:var(--space-2)">ACWR</div>
-        <div class="kpi-value" style="font-size:var(--text-xl);color:${acwrStatus.color}">${acwr !== null ? acwr.toFixed(2) : '—'}</div>
-        <div style="font-size:var(--text-xs);color:var(--color-text-muted);margin-top:var(--space-1)">${acwrStatus.label}</div>
-      </div>
-      <div class="card card-sm" style="border-top:2px solid var(--color-gold)">
-        <div style="font-size:var(--text-xs);color:var(--color-text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:var(--space-2)">This Week</div>
-        <div class="kpi-value" style="font-size:var(--text-xl);color:var(--color-gold)">${thisWeekLoad.toLocaleString()}</div>
-        <div style="font-size:var(--text-xs);color:var(--color-text-muted);margin-top:var(--space-1)">AU (sRPE × min)</div>
-      </div>
-      <div class="card card-sm" style="border-top:2px solid var(--color-blue)">
-        <div style="font-size:var(--text-xs);color:var(--color-text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:var(--space-2)">Total Sessions</div>
-        <div class="kpi-value" style="font-size:var(--text-xl);color:var(--color-blue)">${workouts.length}</div>
-        <div style="font-size:var(--text-xs);color:var(--color-text-muted);margin-top:var(--space-1)">logged</div>
-      </div>
+    <div class="kpi-row">
+      ${kpi('This week', formatDuration(thisWeek.minutes), `${thisWeek.count} rides · ${Math.round(thisWeek.km)} km`, 'var(--color-primary)')}
+      ${kpi('4-week average', formatDuration(Math.round(avgMinutes)), 'per week', 'var(--color-blue)')}
+      ${kpi('Acute:chronic', acwr !== null ? acwr.toFixed(2) : '—', status.label, status.color)}
+      ${ftp
+        ? kpi('FTP', `${ftp} W`, state.profile.weight_kg ? `${(ftp / state.profile.weight_kg).toFixed(2)} W/kg` : 'Add weight in Profile for W/kg', 'var(--color-gold)')
+        : kpi('Elevation (wk)', `${Math.round(thisWeek.elevation).toLocaleString()} m`, 'climbed this week', 'var(--color-gold)')}
     </div>
 
-    <!-- Phase progress bar -->
-    <div class="card" style="margin-bottom:var(--space-4)">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-3)">
-        <div>
-          <h2 style="font-size:var(--text-sm);font-weight:600">Training Phase Progress</h2>
-          <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin-top:2px">Week ${phaseProgress} of ${phaseWeeks} — Endurance Block</p>
-        </div>
-        <span class="badge badge-primary">Week ${phaseProgress}</span>
-      </div>
-      <div style="height:8px;background:var(--color-surface-offset);border-radius:var(--radius-full);overflow:hidden">
-        <div style="height:100%;width:${(phaseProgress / phaseWeeks) * 100}%;background:linear-gradient(90deg,var(--color-primary),var(--color-blue));border-radius:var(--radius-full);transition:width 0.8s ease"></div>
-      </div>
-      <div style="display:flex;justify-content:space-between;margin-top:var(--space-2)">
-        <span style="font-size:10px;color:var(--color-text-faint)">Start</span>
-        <span style="font-size:10px;color:var(--color-text-faint)">Week ${Math.round(phaseWeeks / 2)} — Peak</span>
-        <span style="font-size:10px;color:var(--color-text-faint)">Week ${phaseWeeks} — Taper</span>
-      </div>
-    </div>
-
-    <!-- Charts -->
     <div class="charts-row">
-      <div class="card">
-        <h2 style="font-size:var(--text-sm);font-weight:600;margin-bottom:var(--space-1)">Weekly Load (AU)</h2>
-        <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin-bottom:var(--space-4)">sRPE × minutes per week</p>
-        <canvas id="athlete-load-chart" height="200" aria-label="Weekly training load"></canvas>
-      </div>
-      <div class="card">
-        <h2 style="font-size:var(--text-sm);font-weight:600;margin-bottom:var(--space-1)">ACWR Trend</h2>
-        <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin-bottom:var(--space-4)">Sweet spot: 0.80–1.30</p>
-        <canvas id="athlete-acwr-chart" height="200" aria-label="ACWR trend"></canvas>
-      </div>
+      <section class="card">
+        <div class="card-head"><h3>Weekly volume</h3><span class="faint small">hours · km</span></div>
+        <div class="chart-box"><canvas id="volume-chart" aria-label="Weekly hours and distance"></canvas></div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h3>Training load</h3><span class="faint small">RPE × min · ACWR sweet spot 0.8–1.3</span></div>
+        <div class="chart-box"><canvas id="load-chart" aria-label="Weekly load and ACWR"></canvas></div>
+      </section>
     </div>
 
-    <!-- Compliance bar -->
-    <div class="card" style="margin-top:var(--space-4)">
-      <h2 style="font-size:var(--text-sm);font-weight:600;margin-bottom:var(--space-4)">Session Compliance Breakdown</h2>
-      <div style="display:flex;gap:var(--space-3);align-items:center;margin-bottom:var(--space-3)">
-        ${[
-          { label: 'Completed', status: 'completed', color: 'var(--color-success)' },
-          { label: 'Skipped',   status: 'skipped',   color: 'var(--color-error)' },
-          { label: 'Assigned',  status: 'assigned',  color: 'var(--color-primary)' },
-        ].map(item => {
-          const count = workouts.filter(w => w.status === item.status).length
-          const pct = workouts.length > 0 ? Math.round((count / workouts.length) * 100) : 0
-          return `
-            <div style="display:flex;align-items:center;gap:var(--space-2)">
-              <span style="width:10px;height:10px;border-radius:50%;background:${item.color}"></span>
-              <span style="font-size:var(--text-xs);color:var(--color-text-muted)">${item.label}</span>
-              <span style="font-size:var(--text-xs);font-variant-numeric:tabular-nums;font-weight:600">${pct}%</span>
-            </div>
-          `
-        }).join('')}
-      </div>
-      <div style="height:12px;background:var(--color-surface-offset);border-radius:var(--radius-full);overflow:hidden;display:flex">
-        ${[
-          { status: 'completed', color: 'var(--color-success)' },
-          { status: 'skipped',   color: 'var(--color-error)' },
-          { status: 'assigned',  color: 'var(--color-primary)' },
-        ].map(item => {
-          const pct = workouts.length > 0
-            ? Math.round((workouts.filter(w => w.status === item.status).length / workouts.length) * 100)
-            : 0
-          return `<div style="width:${pct}%;background:${item.color};transition:width 0.6s ease"></div>`
-        }).join('')}
-      </div>
+    <div class="grid-2">
+      <section class="card">
+        <div class="card-head"><h3>Ride mix</h3><span class="faint small">time by type, last 8 weeks</span></div>
+        ${mixTotal ? `
+          <div class="stack-sm">
+            ${Object.entries(mix).sort((a, b) => b[1] - a[1]).map(([type, mins]) => {
+              const t = rideType(type)
+              const pct = Math.round((mins / mixTotal) * 100)
+              return `
+                <div class="bar-row">
+                  <span class="small">${t.label}</span>
+                  <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${t.color}"></div></div>
+                  <span class="small tabular">${pct}%</span>
+                </div>`
+            }).join('')}
+          </div>` : `<p class="muted small">Log a few rides to see your mix.</p>`}
+      </section>
+      <section class="card">
+        <div class="card-head"><h3>Last 8 weeks</h3></div>
+        <div class="stat-grid">
+          <div class="stat"><span class="faint small">Rides</span><span class="kpi-value stat-value">${recent.length}</span></div>
+          <div class="stat"><span class="faint small">Time</span><span class="kpi-value stat-value">${formatDuration(sum(recent, 'duration_min'))}</span></div>
+          <div class="stat"><span class="faint small">Distance</span><span class="kpi-value stat-value">${Math.round(sum(recent, 'distance_km')).toLocaleString()} km</span></div>
+          <div class="stat"><span class="faint small">Climbing</span><span class="kpi-value stat-value">${Math.round(sum(recent, 'elevation_m')).toLocaleString()} m</span></div>
+          <div class="stat"><span class="faint small">Longest ride</span><span class="kpi-value stat-value">${formatDuration(Math.max(0, ...recent.map(r => r.duration_min || 0)))}</span></div>
+          <div class="stat"><span class="faint small">Est. TSS / week</span><span class="kpi-value stat-value">${tssRides.length ? Math.round(tssRides.reduce((a, b) => a + b, 0) / 8) : '—'}</span></div>
+        </div>
+        ${!ftp ? `<p class="faint small" style="margin-top:var(--space-3)">Set your FTP in Profile to estimate TSS from average power.</p>` : ''}
+      </section>
     </div>
   `
 
-  requestAnimationFrame(() => {
-    if (!window.Chart) return
-    const labels = weeklyLoads.map(w => w.label.replace(/\d{4}-/, ''))
-    const chartDefaults = {
-      responsive: true,
-      plugins: { legend: { display: false } },
-    }
-    const gridStyle = { color: 'rgba(255,255,255,0.04)' }
-    const tickStyle = { color: '#8a8a95', font: { size: 11 } }
-
-    new window.Chart(wrap.querySelector('#athlete-load-chart'), {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [{
-          data: weeklyLoads.map(w => w.load),
-          backgroundColor: 'rgba(0,201,177,0.6)',
-          borderColor: '#00c9b1',
-          borderWidth: 1,
-          borderRadius: 4
-        }]
-      },
-      options: { ...chartDefaults, scales: { x: { grid: gridStyle, ticks: tickStyle }, y: { grid: gridStyle, ticks: tickStyle, beginAtZero: true } } }
-    })
-
-    new window.Chart(wrap.querySelector('#athlete-acwr-chart'), {
-      type: 'line',
-      data: {
-        labels,
-        datasets: [
-          { data: weeklyLoads.map(() => acwr), borderColor: '#a78bfa', tension: 0.3, pointRadius: 3, fill: false, label: 'ACWR' },
-          { data: weeklyLoads.map(() => 1.30), borderColor: 'rgba(251,191,36,0.3)', borderDash: [5,5], pointRadius: 0, fill: false },
-          { data: weeklyLoads.map(() => 0.80), borderColor: 'rgba(96,165,250,0.3)', borderDash: [5,5], pointRadius: 0, fill: false }
-        ]
-      },
-      options: { ...chartDefaults, scales: { x: { grid: gridStyle, ticks: tickStyle }, y: { min: 0, max: 2, grid: gridStyle, ticks: tickStyle } } }
-    })
-  })
-
+  requestAnimationFrame(() => drawCharts(wrap, weeks))
   return wrap
+}
+
+function kpi(label, value, sub, color) {
+  return `
+    <div class="card card-sm kpi" style="--kpi-color:${color}">
+      <div class="kpi-label">${label}</div>
+      <div class="kpi-value kpi-big">${value}</div>
+      <div class="faint small">${sub}</div>
+    </div>`
+}
+
+function drawCharts(wrap, weeks) {
+  if (!window.Chart || !wrap.isConnected) return
+  while (charts.length) charts.pop().destroy()
+
+  const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  const grid = { color: css('--color-divider') }
+  const ticks = { color: css('--color-text-muted'), font: { size: 11 } }
+  const labels = weeks.map(w => w.label)
+  const base = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { labels: { color: css('--color-text-muted'), boxWidth: 10, font: { size: 11 } } } }
+  }
+
+  charts.push(new window.Chart(wrap.querySelector('#volume-chart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Hours', data: weeks.map(w => +(w.minutes / 60).toFixed(1)), backgroundColor: css('--color-primary'), borderRadius: 4, yAxisID: 'y' },
+        { label: 'km', type: 'line', data: weeks.map(w => Math.round(w.km)), borderColor: css('--color-blue'), backgroundColor: css('--color-blue'), tension: 0.3, pointRadius: 2, yAxisID: 'y1' }
+      ]
+    },
+    options: {
+      ...base,
+      scales: {
+        x: { grid, ticks },
+        y: { grid, ticks, beginAtZero: true, title: { display: true, text: 'h', color: ticks.color } },
+        y1: { position: 'right', grid: { display: false }, ticks, beginAtZero: true, title: { display: true, text: 'km', color: ticks.color } }
+      }
+    }
+  }))
+
+  charts.push(new window.Chart(wrap.querySelector('#load-chart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Load (AU)', data: weeks.map(w => w.load), backgroundColor: css('--color-surface-dynamic'), borderRadius: 4, yAxisID: 'y' },
+        { label: 'ACWR', type: 'line', data: weeks.map(w => w.acwr), borderColor: css('--color-purple'), backgroundColor: css('--color-purple'), tension: 0.3, pointRadius: 2, spanGaps: true, yAxisID: 'y1' }
+      ]
+    },
+    options: {
+      ...base,
+      scales: {
+        x: { grid, ticks },
+        y: { grid, ticks, beginAtZero: true },
+        y1: { position: 'right', min: 0, max: 2, grid: { display: false }, ticks }
+      }
+    }
+  }))
 }

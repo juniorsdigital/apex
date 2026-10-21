@@ -1,85 +1,80 @@
+// Month calendar — tap a day to plan or log, tap a ride to edit it.
+import { renderApp } from '../app.js'
+import { rideType, isDone, sum } from '../lib/metrics.js'
+import { esc, dateKey, addDays, startOfWeek, formatDuration } from '../lib/util.js'
+import { openRideForm } from './RideForm.js'
+
+let monthOffset = 0
+
 export function renderCalendar(state) {
+  const now = new Date()
+  const month = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1)
+  const gridStart = startOfWeek(month)
+  const today = dateKey()
+  const days = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i))
+  // Drop a trailing week that belongs entirely to the next month.
+  if (days[35].getMonth() !== month.getMonth()) days.length = 35
+
+  const byDate = {}
+  for (const r of state.rides) (byDate[r.ride_date] ||= []).push(r)
+
+  const monthKeyPrefix = dateKey(month).slice(0, 7)
+  const monthDone = state.rides.filter(r => isDone(r) && r.ride_date.startsWith(monthKeyPrefix))
+
   const wrap = document.createElement('div')
-  const workouts = state.workouts || []
-
-  const today = new Date()
-  const startOfWeek = new Date(today)
-  startOfWeek.setDate(today.getDate() - today.getDay())
-
-  const weeks = []
-  for (let w = 0; w < 4; w++) {
-    const week = []
-    for (let d = 0; d < 7; d++) {
-      const date = new Date(startOfWeek)
-      date.setDate(startOfWeek.getDate() + w * 7 + d)
-      week.push(date)
-    }
-    weeks.push(week)
-  }
-
-  const workoutsByDate = {}
-  workouts.forEach(wo => {
-    const key = wo.workout_date
-    if (!workoutsByDate[key]) workoutsByDate[key] = []
-    workoutsByDate[key].push(wo)
-  })
-
-  const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
+  wrap.className = 'stack'
   wrap.innerHTML = `
-    <div style="margin-bottom:var(--space-6)">
-      <h1 style="font-size:var(--text-lg);font-weight:700">Schedule</h1>
-      <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-top:var(--space-1)">
-        Your 4-week training schedule
-      </p>
+    <div class="page-head">
+      <div>
+        <h2 class="page-title">${month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</h2>
+        <p class="muted small">${monthDone.length} rides · ${formatDuration(sum(monthDone, 'duration_min'))} · ${Math.round(sum(monthDone, 'distance_km'))} km</p>
+      </div>
+      <div class="row">
+        <button class="btn btn-ghost btn-icon" data-shift="-1" aria-label="Previous month"><i data-lucide="chevron-left"></i></button>
+        <button class="btn btn-ghost btn-sm" data-shift="0">Today</button>
+        <button class="btn btn-ghost btn-icon" data-shift="1" aria-label="Next month"><i data-lucide="chevron-right"></i></button>
+      </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:auto repeat(7,1fr);gap:var(--space-2);margin-bottom:var(--space-2)">
-      <div style="font-size:var(--text-xs);color:var(--color-text-faint)">Week</div>
-      ${dayLabels.map(d => `
-        <div style="font-size:var(--text-xs);color:var(--color-text-muted);font-weight:600;text-align:center">${d}</div>
-      `).join('')}
+    <div class="calendar">
+      ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => `<div class="cal-dow">${d}</div>`).join('')}
+      ${days.map(d => {
+        const key = dateKey(d)
+        const rides = byDate[key] || []
+        return `
+          <div class="cal-day ${d.getMonth() !== month.getMonth() ? 'other' : ''} ${key === today ? 'today' : ''}"
+            data-date="${key}" role="button" tabindex="0" aria-label="${d.toDateString()}, ${rides.length} rides">
+            <span class="cal-num">${d.getDate()}</span>
+            ${rides.map(r => `
+              <span class="cal-ride status-${r.status}" data-ride-id="${r.id}" style="--type-color:${rideType(r.ride_type).color}"
+                title="${esc(r.title || rideType(r.ride_type).label)}">${esc(r.title || rideType(r.ride_type).label)}</span>
+            `).join('')}
+          </div>`
+      }).join('')}
     </div>
 
-    <div style="display:flex;flex-direction:column;gap:var(--space-2)">
-      ${weeks.map((week, wi) => `
-        <div style="display:grid;grid-template-columns:auto repeat(7,1fr);gap:var(--space-2)">
-          <div style="font-size:var(--text-xs);color:var(--color-text-faint);padding-top:var(--space-3);min-width:40px">W${wi + 1}</div>
-          ${week.map(date => {
-            const key = date.toISOString().split('T')[0]
-            const dayWorkouts = workoutsByDate[key] || []
-            const isToday = key === today.toISOString().split('T')[0]
-            return `
-              <div style="
-                min-height:80px;
-                background:var(--color-surface);
-                border:1px solid ${isToday ? 'var(--color-primary)' : 'var(--color-border)'};
-                border-radius:var(--radius-md);
-                padding:var(--space-2);
-              ">
-                <div style="font-size:var(--text-xs);font-weight:${isToday ? '700' : '400'};color:${isToday ? 'var(--color-primary)' : 'var(--color-text-muted)'};margin-bottom:var(--space-1)">
-                  ${date.getDate()}
-                </div>
-                ${dayWorkouts.map(wo => `
-                  <div style="
-                    font-size:10px;
-                    background:${wo.status === 'completed' ? 'var(--color-success-muted)' : wo.status === 'skipped' ? 'var(--color-error-muted)' : 'var(--color-primary-highlight)'};
-                    color:${wo.status === 'completed' ? 'var(--color-success)' : wo.status === 'skipped' ? 'var(--color-error)' : 'var(--color-primary)'};
-                    border-radius:var(--radius-sm);
-                    padding:2px var(--space-2);
-                    margin-bottom:2px;
-                    white-space:nowrap;
-                    overflow:hidden;
-                    text-overflow:ellipsis;
-                  ">${wo.title || 'Session'}</div>
-                `).join('')}
-              </div>
-            `
-          }).join('')}
-        </div>
-      `).join('')}
+    <div class="legend faint small">
+      <span><i class="legend-dot done"></i>Done</span>
+      <span><i class="legend-dot planned"></i>Planned</span>
+      <span><i class="legend-dot skipped"></i>Skipped</span>
+      <span>Tap a day to add a ride</span>
     </div>
   `
+
+  wrap.querySelectorAll('[data-shift]').forEach(btn => btn.addEventListener('click', () => {
+    const n = Number(btn.dataset.shift)
+    monthOffset = n === 0 ? 0 : monthOffset + n
+    renderApp()
+  }))
+
+  const open = e => {
+    const chip = e.target.closest('[data-ride-id]')
+    if (chip) return openRideForm({ ride: state.rides.find(r => r.id === chip.dataset.rideId) })
+    const day = e.target.closest('[data-date]')
+    if (day) openRideForm({ date: day.dataset.date })
+  }
+  wrap.querySelector('.calendar').addEventListener('click', open)
+  wrap.querySelector('.calendar').addEventListener('keydown', e => { if (e.key === 'Enter') open(e) })
 
   return wrap
 }
