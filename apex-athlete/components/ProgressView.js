@@ -122,6 +122,7 @@ function drawCharts(wrap, weeks) {
   while (charts.length) charts.pop().destroy()
 
   const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  window.Chart.defaults.font.family = css('--font')
   const grid = { color: css('--color-divider') }
   const ticks = { color: css('--color-text-muted'), font: { size: 11 } }
   const labels = weeks.map(w => w.label)
@@ -137,7 +138,7 @@ function drawCharts(wrap, weeks) {
     data: {
       labels,
       datasets: [
-        { label: 'Hours', data: weeks.map(w => +(w.minutes / 60).toFixed(1)), backgroundColor: css('--color-primary'), borderRadius: 0, yAxisID: 'y' },
+        { label: 'Hours', data: weeks.map(w => +(w.minutes / 60).toFixed(1)), backgroundColor: css('--color-primary'), borderRadius: 4, yAxisID: 'y' },
         { label: 'km', type: 'line', data: weeks.map(w => Math.round(w.km)), borderColor: css('--color-blue'), backgroundColor: css('--color-blue'), tension: 0.3, pointRadius: 2, yAxisID: 'y1' }
       ]
     },
@@ -156,7 +157,7 @@ function drawCharts(wrap, weeks) {
     data: {
       labels,
       datasets: [
-        { label: 'Load (AU)', data: weeks.map(w => w.load), backgroundColor: css('--color-surface-dynamic'), borderRadius: 0, yAxisID: 'y' },
+        { label: 'Load (AU)', data: weeks.map(w => w.load), backgroundColor: css('--color-surface-dynamic'), borderRadius: 4, yAxisID: 'y' },
         { label: 'ACWR', type: 'line', data: weeks.map(w => w.acwr), borderColor: css('--color-purple'), backgroundColor: css('--color-purple'), tension: 0.3, pointRadius: 2, spanGaps: true, yAxisID: 'y1' }
       ]
     },

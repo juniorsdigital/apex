@@ -49,22 +49,45 @@ export function renderToday(state) {
         <span class="inline-status" id="import-status" role="status"></span>
       </div>` : ''}
 
-    <section class="section" aria-labelledby="today-h">
-      <div class="section-head">
-        <h2 id="today-h">Today's riding</h2>
-        ${todayRides.length ? `<span class="faint small">${todayRides.filter(isDone).length} of ${todayRides.length} done</span>` : ''}
-      </div>
-      ${todayRides.length ? `
-        <div class="stack-sm">${todayRides.map(rideCard).join('')}</div>
-      ` : `
-        <div class="empty card">
-          <p>Nothing logged yet today.</p>
-          <p>Log a ride when you're back, or plan one for later.</p>
+    <section class="card week-hero" aria-labelledby="week-h">
+      <div>
+        <div class="week-hero-head">
+          <h2 id="week-h">This week's load</h2>
+          <span class="faint small">${formatDate(weekDays[0], { month: 'short', day: 'numeric' })} to ${formatDate(weekDays[6], { month: 'short', day: 'numeric' })}, RPE × minutes per day</span>
         </div>
-      `}
+        ${weekProfile(weekDays, weekRides, today)}
+      </div>
+      <div class="week-hero-stats">
+        <div class="stat-grid">
+          ${stat('Rides', weekDone.length)}
+          ${stat('Time', formatDuration(sum(weekDone, 'duration_min')))}
+          ${stat('Distance', `${Math.round(sum(weekDone, 'distance_km'))} km`)}
+          ${stat('Load', weekDone.reduce((a, r) => a + rideLoad(r), 0).toLocaleString())}
+        </div>
+        ${upNext ? `
+          <div class="up-next">
+            <span class="faint small">Up next, ${formatDate(upNext.ride_date)}</span>
+            <span>${esc(upNext.title || rideType(upNext.ride_type).label)}${upNext.duration_min ? `, ${formatDuration(upNext.duration_min)}` : ''}</span>
+          </div>` : ''}
+      </div>
     </section>
 
     <div class="grid-2">
+      <section class="section" aria-labelledby="today-h">
+        <div class="section-head">
+          <h2 id="today-h">Today's riding</h2>
+          ${todayRides.length ? `<span class="faint small">${todayRides.filter(isDone).length} of ${todayRides.length} done</span>` : ''}
+        </div>
+        ${todayRides.length ? `
+          <div class="stack-sm">${todayRides.map(rideCard).join('')}</div>
+        ` : `
+          <div class="empty card">
+            <p>Nothing logged yet today.</p>
+            <p>Log a ride when you're back, or plan one for later.</p>
+          </div>
+        `}
+      </section>
+
       <section class="section" aria-labelledby="ready-h">
         <div class="section-head">
           <h2 id="ready-h">How are you feeling?</h2>
@@ -88,37 +111,6 @@ export function renderToday(state) {
           <div class="row-between faint small"><span>1 = rough</span><span>5 = great</span></div>
           <span class="inline-status" id="readiness-status" role="status"></span>
         </div>
-      </section>
-
-      <section class="section" aria-labelledby="week-h">
-        <div class="section-head">
-          <h2 id="week-h">This week</h2>
-          <span class="faint small">${formatDate(weekDays[0], { month: 'short', day: 'numeric' })} to ${formatDate(weekDays[6], { month: 'short', day: 'numeric' })}</span>
-        </div>
-        <div class="week-strip">
-          ${weekDays.map(d => {
-            const rides = weekRides.filter(r => r.ride_date === d)
-            const cls = rides.some(isDone) ? 'done' : rides.some(r => r.status === 'planned') ? 'planned' : ''
-            const desc = cls === 'done' ? 'ridden' : cls === 'planned' ? 'ride planned' : 'no ride'
-            return `
-              <div class="week-day ${d === today ? 'today' : ''}">
-                <span class="faint" aria-hidden="true">${formatDate(d, { weekday: 'narrow' })}</span>
-                <span class="week-dot ${cls}" title="${rides.map(r => esc(r.title || rideType(r.ride_type).label)).join(', ')}"></span>
-                <span class="visually-hidden">${formatDate(d, { weekday: 'long' })}: ${desc}</span>
-              </div>`
-          }).join('')}
-        </div>
-        <div class="stat-grid">
-          ${stat('Rides', weekDone.length)}
-          ${stat('Time', formatDuration(sum(weekDone, 'duration_min')))}
-          ${stat('Distance', `${Math.round(sum(weekDone, 'distance_km'))} km`)}
-          ${stat('Load', weekDone.reduce((a, r) => a + rideLoad(r), 0).toLocaleString())}
-        </div>
-        ${upNext ? `
-          <div class="up-next">
-            <span class="faint small">Up next, ${formatDate(upNext.ride_date)}</span>
-            <span>${esc(upNext.title || rideType(upNext.ride_type).label)}${upNext.duration_min ? `, ${formatDuration(upNext.duration_min)}` : ''}</span>
-          </div>` : ''}
       </section>
     </div>
 
@@ -201,6 +193,52 @@ function readinessScore(r) {
   if (avg >= 3) return 'Good to train'
   if (avg >= 2) return 'Keep it easy'
   return 'Consider resting'
+}
+
+// The week drawn like a route's elevation profile: each day's completed load
+// is the height, so a hard Tuesday reads as a climb.
+function weekProfile(weekDays, weekRides, today) {
+  const W = 700, H = 150, base = 138
+  const loads = weekDays.map(d => weekRides.filter(r => r.ride_date === d).reduce((a, r) => a + rideLoad(r), 0))
+  const max = Math.max(...loads)
+  const x = i => ((i + 0.5) / 7) * W
+  const y = i => (max ? base - (loads[i] / max) * (base - 14) : base)
+  // Cubic segments with horizontal handles: smooth like terrain, never overshoots.
+  const pts = [[0, y(0)], ...loads.map((_, i) => [x(i), y(i)]), [W, y(6)]]
+  const line = pts.reduce((d, [px, py], i) => {
+    if (i === 0) return `M${px},${py.toFixed(1)}`
+    const [qx, qy] = pts[i - 1]
+    const mx = ((qx + px) / 2).toFixed(1)
+    return `${d} C${mx},${qy.toFixed(1)} ${mx},${py.toFixed(1)} ${px.toFixed(1)},${py.toFixed(1)}`
+  }, '')
+  const todayIdx = weekDays.indexOf(today)
+
+  const summary = weekDays.map((d, i) => {
+    const rides = weekRides.filter(r => r.ride_date === d)
+    const desc = rides.some(isDone) ? `load ${loads[i].toLocaleString()}` : rides.some(r => r.status === 'planned') ? 'ride planned' : 'no ride'
+    return `${formatDate(d, { weekday: 'long' })}: ${desc}`
+  }).join('. ')
+
+  return `
+    <svg class="profile-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Daily training load this week. ${summary}">
+      <line class="profile-base" x1="0" y1="${base}" x2="${W}" y2="${base}"/>
+      <path class="profile-area" d="${line} L${W},${base} L0,${base} Z"/>
+      <path class="profile-line" d="${line}"/>
+      ${todayIdx >= 0 ? `<line class="profile-today" x1="${x(todayIdx)}" y1="0" x2="${x(todayIdx)}" y2="${base}"/>` : ''}
+    </svg>
+    <div class="profile-days" aria-hidden="true">
+      ${weekDays.map((d, i) => {
+        const rides = weekRides.filter(r => r.ride_date === d)
+        const cls = rides.some(isDone) ? 'done' : rides.some(r => r.status === 'planned') ? 'planned' : ''
+        return `
+          <div class="profile-day ${d === today ? 'today' : ''}" title="${rides.map(r => esc(r.title || rideType(r.ride_type).label)).join(', ')}">
+            <span class="profile-mark ${cls}"></span>
+            <b>${formatDate(d, { weekday: 'short' })}</b>
+            <span class="tabular">${loads[i] ? loads[i].toLocaleString() : ''}</span>
+          </div>`
+      }).join('')}
+    </div>
+    ${max ? '' : `<p class="faint small" style="margin-top:var(--space-2)">No completed rides with an effort rating this week yet.</p>`}`
 }
 
 function stat(label, value) {
