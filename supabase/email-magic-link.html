@@ -1,0 +1,46 @@
+<!-- Supabase → Authentication → Emails → Magic link or OTP. Subject: Your Apex sign-in code -->
+<div style="margin:0;padding:0;background:#eef1f0;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eef1f0;">
+    <tr>
+      <td align="center" style="padding:40px 16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#172033;">
+          <tr>
+            <td style="padding:0 4px 20px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="vertical-align:middle;"><img src="https://apexathlete.vercel.app/icons/icon-192.png" width="40" height="40" alt="" style="display:block;border:0;border-radius:10px;"></td>
+                  <td style="vertical-align:middle;padding-left:12px;">
+                    <div style="font-size:20px;font-weight:800;line-height:1;letter-spacing:-0.01em;">Apex</div>
+                    <div style="font-size:13px;color:#5b6475;padding-top:3px;">Your road to race day</div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#ffffff;border-radius:16px;padding:32px 28px;">
+              <h1 style="margin:0 0 8px;font-size:24px;font-weight:800;line-height:1.2;letter-spacing:-0.02em;color:#172033;">Sign in to Apex</h1>
+              <p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#5b6475;">Enter this code in the app to sign in.</p>
+              <div style="background:#eef1f0;border-radius:12px;padding:18px 12px;text-align:center;">
+                <div style="font-family:'SF Mono',Menlo,Consolas,monospace;font-size:34px;font-weight:700;letter-spacing:8px;color:#2747d9;">{{ .Token }}</div>
+              </div>
+              <p style="margin:28px 0 14px;font-size:15px;line-height:1.5;color:#5b6475;">Or, on this device, sign in with one tap:</p>
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="background:#2747d9;border-radius:999px;">
+                    <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:13px 28px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;">Sign in to Apex</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 4px 0;font-size:12px;line-height:1.5;color:#7a8394;">
+              The code and link work once and expire soon. If you didn't ask to sign in, you can ignore this email.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</div>
