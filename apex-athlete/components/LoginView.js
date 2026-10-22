@@ -12,14 +12,14 @@ export function renderLogin() {
         ${LOGO_SVG}
         <div>
           <div class="login-name">Apex</div>
-          <div class="muted small">Your cycling training log</div>
+          <div class="muted small">Your road to race day</div>
         </div>
       </div>
       <div class="card login-card">
         <h1>Sign in</h1>
         <p class="muted small">
-          Enter your email and we'll send you a sign-in link. Signing in syncs your rides
-          and unlocks your calendar, ride history and progress charts.
+          Enter your email and we'll send you a sign-in link. Signing in syncs your plan
+          and journal across devices and opens the full plan, journal and journey.
         </p>
         <form id="login-form" novalidate>
           <label class="label" for="login-email">Email address</label>

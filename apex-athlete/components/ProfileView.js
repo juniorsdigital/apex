@@ -1,14 +1,12 @@
-// Profile — rider details used by the dashboard and progress metrics.
+// Profile — rider details (name, FTP, weight, max HR).
 import { signOut } from '../lib/supabase.js'
 import { esc, friendlyError, validateForm, clearErrorsOnInput } from '../lib/util.js'
 
 const FIELDS = [
   { name: 'full_name',  label: 'Name',            type: 'text',   placeholder: 'Your name', autocomplete: 'name' },
-  { name: 'ftp_watts',  label: 'FTP',             type: 'number', unit: 'W',   min: 50,  max: 600, hint: 'Used to estimate TSS from average power.' },
+  { name: 'ftp_watts',  label: 'FTP',             type: 'number', unit: 'W',   min: 50,  max: 600, hint: 'For your reference; your plan sets the targets.' },
   { name: 'weight_kg',  label: 'Weight',          type: 'number', unit: 'kg',  min: 30,  max: 200, step: 0.1, hint: 'Used for watts per kilo.' },
-  { name: 'max_hr',     label: 'Max heart rate',  type: 'number', unit: 'bpm', min: 120, max: 230 },
-  { name: 'goal_event', label: 'Goal event',      type: 'text',   placeholder: 'e.g. Gran Fondo, first century' },
-  { name: 'goal_date',  label: 'Goal date',       type: 'date',   hint: 'Progress counts down the days.' }
+  { name: 'max_hr',     label: 'Max heart rate',  type: 'number', unit: 'bpm', min: 120, max: 230 }
 ]
 
 export function renderProfile(state) {
@@ -24,7 +22,7 @@ export function renderProfile(state) {
     </div>
     <form class="card form-grid" id="profile-form" novalidate>
       ${FIELDS.map(f => `
-        <div class="field ${f.name === 'full_name' || f.name === 'goal_event' ? 'span-2' : ''}">
+        <div class="field ${f.name === 'full_name' ? 'span-2' : ''}">
           <label class="label" for="pf-${f.name}">${f.label} <span class="faint">${f.unit ? `(${f.unit}, optional)` : '(optional)'}</span></label>
           <input class="input" id="pf-${f.name}" name="${f.name}" type="${f.type}" value="${esc(p[f.name] ?? '')}"
             ${f.type === 'number' ? `inputmode="${f.step ? 'decimal' : 'numeric'}"` : ''}
@@ -42,7 +40,7 @@ export function renderProfile(state) {
     <section class="section" aria-labelledby="account-h">
       <div class="section-head"><h2 id="account-h">Account</h2></div>
       <div class="row-between">
-        <p class="muted small">Rides stay in your account after you sign out.</p>
+        <p class="muted small">Your plan and journal stay in your account after you sign out.</p>
         <button class="btn btn-ghost" id="profile-signout"><i data-lucide="log-out" class="icon-sm" aria-hidden="true"></i> Sign out</button>
       </div>
     </section>

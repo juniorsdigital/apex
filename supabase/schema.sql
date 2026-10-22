@@ -1,4 +1,5 @@
--- Apex — personal cycling log schema.
+-- Apex — training plan, journal and readiness schema.
+-- (rides is from the earlier ride log; the app no longer reads it.)
 -- Run once in the Supabase SQL editor (or `supabase db push`).
 -- Every table is private to its owner via row level security.
 
@@ -44,9 +45,32 @@ create table if not exists public.readiness (
   primary key (user_id, check_date)
 );
 
+-- The training plan: the CSV as uploaded, one per rider. The app parses it.
+create table if not exists public.training_plans (
+  user_id      uuid primary key default auth.uid() references auth.users (id) on delete cascade,
+  file_name    text,
+  csv          text not null check (length(csv) <= 5000000),
+  uploaded_at  timestamptz not null default now()
+);
+
+-- Daily journal: how the workout felt and headspace for the next race (1 to 5), plus notes.
+create table if not exists public.journal (
+  user_id         uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  entry_date      date not null,
+  workout_feel    smallint check (workout_feel between 1 and 5),
+  workout_note    text,
+  headspace       smallint check (headspace between 1 and 5),
+  headspace_note  text,
+  note            text,
+  updated_at      timestamptz not null default now(),
+  primary key (user_id, entry_date)
+);
+
 alter table public.profiles  enable row level security;
 alter table public.rides     enable row level security;
 alter table public.readiness enable row level security;
+alter table public.training_plans enable row level security;
+alter table public.journal   enable row level security;
 
 drop policy if exists "own profile" on public.profiles;
 create policy "own profile" on public.profiles
@@ -62,6 +86,18 @@ create policy "own rides" on public.rides
 
 drop policy if exists "own readiness" on public.readiness;
 create policy "own readiness" on public.readiness
+  for all to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+
+drop policy if exists "own plan" on public.training_plans;
+create policy "own plan" on public.training_plans
+  for all to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+
+drop policy if exists "own journal" on public.journal;
+create policy "own journal" on public.journal
   for all to authenticated
   using ((select auth.uid()) = user_id)
   with check ((select auth.uid()) = user_id);

@@ -1,11 +1,19 @@
 # Apex
 
-A personal cycling training log. Plain HTML, CSS and ES modules, with no build step.
+Your road to race day: a training plan, a countdown and a journal. Plain HTML, CSS and ES modules, with no build step.
 
-- **Today** (no sign-in needed): log or plan rides, rate how you feel, and see this week at a glance. Guest data is saved in the browser.
-- **Signed in** (email magic link via Supabase): rides sync to your account, and you also get the **Calendar**, **Rides** log (with filters and CSV export), **Progress** charts (weekly volume, load, ACWR, ride mix, goal countdown) and **Profile** (FTP, weight, max HR, goal event).
-- **Ask the coach** (Calendar): highlight days, pick what you want looked at, and copy a ready-made prompt for Claude, ChatGPT or any AI coach. It includes your profile, the rides, check-ins and the four weeks before. Nothing is sent from the app.
-- Rides logged as a guest can be imported into your account after you sign in.
+- **Plan:** load your training plan as a CSV (one row per day). The app shows today's session, a month calendar coloured by type of day, and every day's details: targets, fueling, strength, Plan B and coach notes. When the plan changes, load the new file; it replaces the old one and journal entries are kept.
+- **Today:** a countdown to the goal race, today's session, the next few days, this week, and today's journal.
+- **Journal:** how the body is (sleep, energy, legs), how the workout felt, headspace for the next race, and notes, with a trend line.
+- **Journey:** the whole season drawn as a route (planned hours per week, coloured by phase, flags for races), the phases in order and the key days ahead.
+
+Guests can use Today with everything saved in the browser. Signing in (email magic link via Supabase) syncs the plan and journal across devices and opens the other pages.
+
+## Plan CSV
+
+Needs `Date` (YYYY-MM-DD) and `Workout`. The app also reads, when present: `Week`, `Week_Start`, `Phase`, `Week_Type`, `Day_Type`, `Venue`, `Hrs_Outdoor`, `Hrs_Indoor`, `Intensity`, `Fueling`, `Strength`, `Alt_If_Recovery_Lacking`, `Bad_Weather_Indoor_Plan`, `Coach_Comments` (sections like `WHAT: ... | FOCUS: ...`) and `Notes`.
+
+`Day_Type` sets the colour (rest, easy, endurance, threshold, intervals, test, rehearsal, race). The goal race is the `NATIONALS` day, or otherwise the last race.
 
 ## Layout
 
@@ -15,10 +23,10 @@ apex-athlete/          the app (deployed to Vercel as `apexathlete`)
   app.js               state, routing, auth wiring
   config.js            Supabase URL + publishable key
   styles.css
-  lib/                 supabase client, data store (guest/cloud), metrics, coach prompt, utils
-  components/          one file per view, plus the ride form modal
+  lib/                 supabase client, data store (guest/cloud), plan parser, utils
+  components/          one file per view, plus shared session, journal form and season route
 supabase/schema.sql    tables + row level security
-docs/                  design notes (intervals.icu auto-import plan)
+docs/                  design notes
 ```
 
 ## Setup
@@ -32,9 +40,3 @@ docs/                  design notes (intervals.icu auto-import plan)
 ```bash
 npx serve apex-athlete -l 8080
 ```
-
-## Metrics
-
-- **Load**: session RPE × minutes (Foster sRPE), counted for completed rides only.
-- **ACWR**: last 7 days' load ÷ (last 28 days' load ÷ 4). 0.8–1.3 is the usual sweet spot.
-- **Est. TSS**: hours × (avg power ÷ FTP)² × 100. This uses average power rather than normalized power, so it reads low on variable rides.

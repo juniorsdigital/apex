@@ -4,9 +4,9 @@ import { esc } from '../lib/util.js'
 
 export const NAV_ITEMS = [
   { id: 'today',    label: 'Today',    icon: 'sun' },
-  { id: 'calendar', label: 'Calendar', icon: 'calendar-days' },
-  { id: 'history',  label: 'Rides',    icon: 'bike' },
-  { id: 'progress', label: 'Progress', icon: 'trending-up' },
+  { id: 'plan',     label: 'Plan',     icon: 'calendar-days' },
+  { id: 'journal',  label: 'Journal',  icon: 'notebook-pen' },
+  { id: 'journey',  label: 'Journey',  icon: 'mountain' },
   { id: 'profile',  label: 'Profile',  icon: 'user' }
 ]
 
@@ -43,7 +43,7 @@ export function renderSidebar(currentView, signedIn, account = '') {
       ${signedIn
         ? `<span class="sidebar-account" title="${esc(account)}">${esc(account)}</span>
            <button class="nav-item" id="signout-btn"><i data-lucide="log-out" class="nav-icon" aria-hidden="true"></i><span class="nav-label">Sign out</span></button>`
-        : `<span class="sidebar-account">Guest mode. Rides are saved in this browser only.</span>
+        : `<span class="sidebar-account">Guest mode. Your plan and journal are saved in this browser only.</span>
            <button class="btn btn-primary btn-block" data-view="login">Sign in</button>`}
     </div>
   `

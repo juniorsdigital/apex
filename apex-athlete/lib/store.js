@@ -2,21 +2,14 @@
 // to Supabase. Both stores expose the same methods so views don't care which.
 import { getClient } from './supabase.js'
 
-const GUEST_KEY = 'apex.guest.v1'
+const GUEST_KEY = 'apex.guest.v2'
 
-export const RIDE_FIELDS = [
-  'ride_date', 'title', 'ride_type', 'status', 'duration_min', 'distance_km',
-  'elevation_m', 'avg_power_w', 'avg_hr', 'rpe', 'notes'
-]
+export const JOURNAL_FIELDS = ['workout_feel', 'workout_note', 'headspace', 'headspace_note', 'note']
 
-function pickRide(ride) {
+function pickJournal(entry) {
   const out = {}
-  for (const f of RIDE_FIELDS) out[f] = ride[f] ?? null
+  for (const f of JOURNAL_FIELDS) out[f] = entry[f] ?? null
   return out
-}
-
-function byDate(a, b) {
-  return a.ride_date.localeCompare(b.ride_date) || (a.created_at || '').localeCompare(b.created_at || '')
 }
 
 // ─── GUEST (this browser only) ───────────────────────────────────────────────
@@ -24,17 +17,23 @@ function byDate(a, b) {
 function readGuest() {
   try {
     const data = JSON.parse(localStorage.getItem(GUEST_KEY))
-    if (data && Array.isArray(data.rides)) return { profile: {}, readiness: {}, ...data }
+    if (data) return { profile: {}, readiness: {}, journal: {}, plan: null, ...data }
   } catch {}
-  return { profile: {}, rides: [], readiness: {} }
+  return { profile: {}, readiness: {}, journal: {}, plan: null }
 }
 
 function writeGuest(data) {
-  try { localStorage.setItem(GUEST_KEY, JSON.stringify(data)) } catch {}
+  try {
+    localStorage.setItem(GUEST_KEY, JSON.stringify(data))
+    return null
+  } catch {
+    return new Error('this browser is out of storage space')
+  }
 }
 
 export function guestDataCount() {
-  return readGuest().rides.length
+  const g = readGuest()
+  return Object.keys(g.journal).length + Object.keys(g.readiness).length + (g.plan ? 1 : 0)
 }
 
 export function clearGuestData() {
@@ -46,45 +45,32 @@ export function createGuestStore() {
     kind: 'guest',
 
     async load() {
-      const data = readGuest()
-      return { profile: data.profile, rides: data.rides.sort(byDate), readiness: data.readiness }
+      const { profile, readiness, journal, plan } = readGuest()
+      return { profile, readiness, journal, plan }
     },
 
-    async saveRide(ride) {
+    async savePlan(file_name, csv) {
       const data = readGuest()
-      const now = new Date().toISOString()
-      let saved
-      if (ride.id) {
-        const i = data.rides.findIndex(r => r.id === ride.id)
-        saved = { ...data.rides[i], ...pickRide(ride), updated_at: now }
-        data.rides[i] = saved
-      } else {
-        saved = { id: crypto.randomUUID(), ...pickRide(ride), created_at: now, updated_at: now }
-        data.rides.push(saved)
-      }
-      writeGuest(data)
-      return { data: saved, error: null }
+      data.plan = { file_name, csv, uploaded_at: new Date().toISOString() }
+      return { data: data.plan, error: writeGuest(data) }
     },
 
-    async deleteRide(id) {
+    async saveJournal(date, entry) {
       const data = readGuest()
-      data.rides = data.rides.filter(r => r.id !== id)
-      writeGuest(data)
-      return { error: null }
+      data.journal[date] = { ...pickJournal(entry), updated_at: new Date().toISOString() }
+      return { error: writeGuest(data) }
     },
 
     async saveReadiness(date, values) {
       const data = readGuest()
       data.readiness[date] = values
-      writeGuest(data)
-      return { error: null }
+      return { error: writeGuest(data) }
     },
 
     async saveProfile(updates) {
       const data = readGuest()
       data.profile = { ...data.profile, ...updates }
-      writeGuest(data)
-      return { data: data.profile, error: null }
+      return { data: data.profile, error: writeGuest(data) }
     }
   }
 }
@@ -99,39 +85,34 @@ export function createCloudStore(user) {
 
     async load() {
       const sb = await getClient()
-      const since = new Date()
-      since.setDate(since.getDate() - 60)
-      const [profile, rides, readiness] = await Promise.all([
+      const [profile, readiness, journal, plan] = await Promise.all([
         sb.from('profiles').select('*').eq('id', uid).maybeSingle(),
-        sb.from('rides').select('*').eq('user_id', uid).order('ride_date'),
-        sb.from('readiness').select('*').eq('user_id', uid).gte('check_date', since.toISOString().slice(0, 10))
+        sb.from('readiness').select('*').eq('user_id', uid),
+        sb.from('journal').select('*').eq('user_id', uid),
+        sb.from('training_plans').select('*').eq('user_id', uid).maybeSingle()
       ])
-      const error = profile.error || rides.error || readiness.error
+      const error = profile.error || readiness.error || journal.error || plan.error
       const readinessMap = {}
       for (const r of readiness.data || []) {
         readinessMap[r.check_date] = { sleep: r.sleep, energy: r.energy, soreness: r.soreness }
       }
-      return {
-        profile: profile.data || {},
-        rides: (rides.data || []).sort(byDate),
-        readiness: readinessMap,
-        error
-      }
+      const journalMap = {}
+      for (const j of journal.data || []) journalMap[j.entry_date] = j
+      return { profile: profile.data || {}, readiness: readinessMap, journal: journalMap, plan: plan.data, error }
     },
 
-    async saveRide(ride) {
+    async savePlan(file_name, csv) {
       const sb = await getClient()
-      const row = { ...pickRide(ride), user_id: uid, updated_at: new Date().toISOString() }
-      const query = ride.id
-        ? sb.from('rides').update(row).eq('id', ride.id).eq('user_id', uid)
-        : sb.from('rides').insert(row)
-      const { data, error } = await query.select().single()
+      const { data, error } = await sb.from('training_plans')
+        .upsert({ user_id: uid, file_name, csv, uploaded_at: new Date().toISOString() }, { onConflict: 'user_id' })
+        .select().single()
       return { data, error }
     },
 
-    async deleteRide(id) {
+    async saveJournal(date, entry) {
       const sb = await getClient()
-      const { error } = await sb.from('rides').delete().eq('id', id).eq('user_id', uid)
+      const { error } = await sb.from('journal')
+        .upsert({ user_id: uid, entry_date: date, ...pickJournal(entry), updated_at: new Date().toISOString() }, { onConflict: 'user_id,entry_date' })
       return { error }
     },
 
@@ -154,12 +135,18 @@ export function createCloudStore(user) {
       return { data, error }
     },
 
-    // Copy anything logged as a guest on this device into the account.
+    // Copy anything kept as a guest on this device into the account.
     async importGuestData() {
       const sb = await getClient()
       const guest = readGuest()
-      if (guest.rides.length) {
-        const { error } = await sb.from('rides').insert(guest.rides.map(r => ({ ...pickRide(r), user_id: uid })))
+      if (guest.plan) {
+        const { error } = await this.savePlan(guest.plan.file_name, guest.plan.csv)
+        if (error) return { error }
+      }
+      const journalRows = Object.entries(guest.journal)
+        .map(([entry_date, v]) => ({ user_id: uid, entry_date, ...pickJournal(v) }))
+      if (journalRows.length) {
+        const { error } = await sb.from('journal').upsert(journalRows, { onConflict: 'user_id,entry_date' })
         if (error) return { error }
       }
       const readinessRows = Object.entries(guest.readiness)
