@@ -1,6 +1,6 @@
 import { navigate } from '../app.js'
 import { sendMagicLink } from '../lib/supabase.js'
-import { esc } from '../lib/util.js'
+import { esc, validateForm, clearErrorsOnInput } from '../lib/util.js'
 import { LOGO_SVG } from './Sidebar.js'
 
 export function renderLogin() {
@@ -21,15 +21,15 @@ export function renderLogin() {
           Enter your email and we'll send you a sign-in link. Signing in syncs your rides
           and unlocks your calendar, ride history and progress charts.
         </p>
-        <form id="login-form">
+        <form id="login-form" novalidate>
           <label class="label" for="login-email">Email address</label>
-          <input id="login-email" type="email" class="input" placeholder="you@example.com" autocomplete="email" required>
+          <input id="login-email" name="email" type="email" class="input" placeholder="you@example.com" autocomplete="email" required>
           <button type="submit" class="btn btn-primary btn-block" id="login-btn">Send sign-in link</button>
         </form>
-        <div id="login-status" class="small" role="status" hidden></div>
+        <div id="login-status" class="inline-status" role="status"></div>
       </div>
       <button class="btn btn-ghost btn-block" id="login-skip">
-        <i data-lucide="arrow-left" style="width:16px;height:16px"></i> Back to today's dashboard
+        <i data-lucide="arrow-left" class="icon-sm" aria-hidden="true"></i> Back to Today
       </button>
     </div>
   `
@@ -37,21 +37,24 @@ export function renderLogin() {
   const btn = wrap.querySelector('#login-btn')
   const status = wrap.querySelector('#login-status')
 
+  clearErrorsOnInput(form)
   form.addEventListener('submit', async (e) => {
     e.preventDefault()
-    const email = wrap.querySelector('#login-email').value.trim()
+    const input = wrap.querySelector('#login-email')
+    input.value = input.value.trim()
+    if (!validateForm(form, { email: 'Enter the email address to send your sign-in link to.' })) return
+    const email = input.value
     btn.disabled = true
     btn.textContent = 'Sending…'
     const { error } = await sendMagicLink(email)
-    status.hidden = false
     if (error) {
-      status.style.color = 'var(--color-error)'
+      status.className = 'inline-status is-error'
       status.textContent = error.message
       btn.disabled = false
       btn.textContent = 'Send sign-in link'
     } else {
-      status.style.color = 'var(--color-success)'
-      status.innerHTML = `✓ Check <strong>${esc(email)}</strong> for your sign-in link.`
+      status.className = 'inline-status is-success'
+      status.innerHTML = `Link sent. Check <strong>${esc(email)}</strong> and open the link on this device.`
       btn.textContent = 'Link sent'
     }
   })

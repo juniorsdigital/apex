@@ -1,5 +1,6 @@
 import { navigate } from '../app.js'
 import { signOut } from '../lib/supabase.js'
+import { esc } from '../lib/util.js'
 
 export const NAV_ITEMS = [
   { id: 'today',    label: 'Today',    icon: 'sun' },
@@ -15,7 +16,7 @@ export const LOGO_SVG = `
     <path d="M7 26 15 12l5 8 3-5 6 11" stroke="var(--color-text-inverse)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
   </svg>`
 
-export function renderSidebar(currentView, signedIn) {
+export function renderSidebar(currentView, signedIn, account = '') {
   const sidebar = document.createElement('aside')
   sidebar.className = 'app-sidebar'
   sidebar.setAttribute('aria-label', 'Main navigation')
@@ -30,18 +31,20 @@ export function renderSidebar(currentView, signedIn) {
         const locked = !signedIn && item.id !== 'today'
         return `
           <button class="nav-item ${currentView === item.id ? 'active' : ''}" data-view="${item.id}"
-            aria-current="${currentView === item.id ? 'page' : 'false'}"
+            ${currentView === item.id ? 'aria-current="page"' : ''}
             ${locked ? 'title="Sign in to use this"' : ''}>
             <i data-lucide="${item.icon}" class="nav-icon" aria-hidden="true"></i>
             <span class="nav-label">${item.label}</span>
-            ${locked ? '<i data-lucide="lock" class="nav-lock" aria-label="Requires sign-in"></i>' : ''}
+            ${locked ? '<i data-lucide="lock" class="nav-lock" aria-hidden="true"></i><span class="visually-hidden">(sign in required)</span>' : ''}
           </button>`
       }).join('')}
     </nav>
     <div class="sidebar-footer">
       ${signedIn
-        ? `<button class="nav-item" id="signout-btn"><i data-lucide="log-out" class="nav-icon" aria-hidden="true"></i><span class="nav-label">Sign out</span></button>`
-        : `<button class="nav-item" data-view="login"><i data-lucide="log-in" class="nav-icon" aria-hidden="true"></i><span class="nav-label">Sign in</span></button>`}
+        ? `<span class="sidebar-account" title="${esc(account)}">${esc(account)}</span>
+           <button class="nav-item" id="signout-btn"><i data-lucide="log-out" class="nav-icon" aria-hidden="true"></i><span class="nav-label">Sign out</span></button>`
+        : `<span class="sidebar-account">Guest mode. Rides are saved in this browser only.</span>
+           <button class="btn btn-primary btn-block" data-view="login">Sign in</button>`}
     </div>
   `
 

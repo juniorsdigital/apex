@@ -6,6 +6,8 @@ import { openRideForm } from './RideForm.js'
 
 let monthOffset = 0
 
+const STATUS_TEXT = { completed: 'done', planned: 'planned', skipped: 'skipped' }
+
 export function renderCalendar(state) {
   const now = new Date()
   const month = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1)
@@ -26,13 +28,13 @@ export function renderCalendar(state) {
   wrap.innerHTML = `
     <div class="page-head">
       <div>
-        <h2 class="page-title">${month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</h2>
-        <p class="muted small">${monthDone.length} rides · ${formatDuration(sum(monthDone, 'duration_min'))} · ${Math.round(sum(monthDone, 'distance_km'))} km</p>
+        <h1 class="page-title" tabindex="-1">${month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</h1>
+        <p class="page-sub">${monthDone.length} rides done, ${formatDuration(sum(monthDone, 'duration_min'))}, ${Math.round(sum(monthDone, 'distance_km'))} km</p>
       </div>
       <div class="row">
-        <button class="btn btn-ghost btn-icon" data-shift="-1" aria-label="Previous month"><i data-lucide="chevron-left"></i></button>
-        <button class="btn btn-ghost btn-sm" data-shift="0">Today</button>
-        <button class="btn btn-ghost btn-icon" data-shift="1" aria-label="Next month"><i data-lucide="chevron-right"></i></button>
+        <button class="btn btn-ghost btn-icon" data-shift="-1" aria-label="Previous month"><i data-lucide="chevron-left" aria-hidden="true"></i></button>
+        <button class="btn btn-ghost" data-shift="0">This month</button>
+        <button class="btn btn-ghost btn-icon" data-shift="1" aria-label="Next month"><i data-lucide="chevron-right" aria-hidden="true"></i></button>
       </div>
     </div>
 
@@ -42,13 +44,15 @@ export function renderCalendar(state) {
         const key = dateKey(d)
         const rides = byDate[key] || []
         return `
-          <div class="cal-day ${d.getMonth() !== month.getMonth() ? 'other' : ''} ${key === today ? 'today' : ''}"
-            data-date="${key}" role="button" tabindex="0" aria-label="${d.toDateString()}, ${rides.length} rides">
-            <span class="cal-num">${d.getDate()}</span>
-            ${rides.map(r => `
-              <span class="cal-ride status-${r.status}" data-ride-id="${r.id}" style="--type-color:${rideType(r.ride_type).color}"
-                title="${esc(r.title || rideType(r.ride_type).label)}">${esc(r.title || rideType(r.ride_type).label)}</span>
-            `).join('')}
+          <div class="cal-day ${d.getMonth() !== month.getMonth() ? 'other' : ''} ${key === today ? 'today' : ''}" data-date="${key}">
+            <button class="cal-num" data-add aria-label="Add a ride on ${d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}"
+              ${key === today ? 'aria-current="date"' : ''}>${d.getDate()}</button>
+            ${rides.map(r => {
+              const name = esc(r.title || rideType(r.ride_type).label)
+              return `
+              <button class="cal-ride status-${r.status}" data-ride-id="${r.id}" style="--type-color:${rideType(r.ride_type).color}"
+                title="${name}" aria-label="Edit ${name}, ${STATUS_TEXT[r.status]}">${name}</button>`
+            }).join('')}
           </div>`
       }).join('')}
     </div>
@@ -57,7 +61,7 @@ export function renderCalendar(state) {
       <span><i class="legend-dot done"></i>Done</span>
       <span><i class="legend-dot planned"></i>Planned</span>
       <span><i class="legend-dot skipped"></i>Skipped</span>
-      <span>Tap a day to add a ride</span>
+      <span>Select a date to add a ride</span>
     </div>
   `
 
@@ -74,7 +78,6 @@ export function renderCalendar(state) {
     if (day) openRideForm({ date: day.dataset.date })
   }
   wrap.querySelector('.calendar').addEventListener('click', open)
-  wrap.querySelector('.calendar').addEventListener('keydown', e => { if (e.key === 'Enter') open(e) })
 
   return wrap
 }

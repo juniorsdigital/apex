@@ -2,7 +2,7 @@ import { getSessionUser, onAuthStateChange } from './lib/supabase.js'
 import { createGuestStore, createCloudStore } from './lib/store.js'
 import { esc, refreshIcons } from './lib/util.js'
 import { renderLogin } from './components/LoginView.js'
-import { renderSidebar, NAV_ITEMS } from './components/Sidebar.js'
+import { renderSidebar, NAV_ITEMS, LOGO_SVG } from './components/Sidebar.js'
 import { renderHeader } from './components/Header.js'
 import { renderToday } from './components/TodayView.js'
 import { renderCalendar } from './components/CalendarView.js'
@@ -63,7 +63,10 @@ export async function deleteRide(id) {
 
 export function renderApp() {
   if (state.loading) {
-    root.innerHTML = `<div class="center-screen muted">Loading…</div>`
+    root.innerHTML = `
+      <div class="center-screen">
+        <div class="loading" role="status">${LOGO_SVG}<span>Loading your rides…</span></div>
+      </div>`
     return
   }
   if (state.currentView === 'login') {
@@ -75,13 +78,20 @@ export function renderApp() {
 
   const shell = document.createElement('div')
   shell.className = 'app-shell'
-  shell.appendChild(renderSidebar(state.currentView, !!state.user))
+  shell.insertAdjacentHTML('beforeend', `<a class="skip-link" href="#main">Skip to content</a>`)
+  shell.appendChild(renderSidebar(state.currentView, !!state.user, state.profile?.full_name || state.user?.email || ''))
   shell.appendChild(renderHeader(state))
 
   const main = document.createElement('main')
   main.className = 'app-main'
+  main.id = 'main'
+  main.tabIndex = -1
   if (state.error) {
-    main.insertAdjacentHTML('beforeend', `<div class="alert alert-error">Couldn't sync with your account: ${esc(state.error)}</div>`)
+    main.insertAdjacentHTML('beforeend', `
+      <div class="alert alert-error" role="alert" style="margin-bottom:var(--space-6)">
+        Couldn't sync with your account, so you may be seeing older rides. Reload the page to try again.
+        <span class="faint small">(${esc(state.error)})</span>
+      </div>`)
   }
   const views = {
     today: renderToday,

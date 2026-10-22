@@ -43,17 +43,131 @@ export function formatDuration(minutes) {
   return h ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`
 }
 
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+// Modal dialog: labelled by its first heading, keeps Tab inside, and hands
+// focus back to whatever opened it (or the page heading if that was re-rendered).
 export function openModal(innerHtml, { width = 480 } = {}) {
+  const opener = document.activeElement
+  const openerId = opener?.id
   const overlay = document.createElement('div')
   overlay.className = 'modal-overlay'
   overlay.innerHTML = `<div class="card modal" role="dialog" aria-modal="true" style="max-width:${width}px">${innerHtml}</div>`
-  const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey) }
-  const onKey = e => { if (e.key === 'Escape') close() }
+  const dialog = overlay.firstElementChild
+  const heading = dialog.querySelector('h2')
+  if (heading) {
+    heading.id ||= 'modal-title'
+    dialog.setAttribute('aria-labelledby', heading.id)
+  }
+
+  const close = () => {
+    overlay.remove()
+    document.removeEventListener('keydown', onKey)
+    const target = opener?.isConnected ? opener
+      : (openerId && document.getElementById(openerId)) || document.querySelector('.page-title')
+    target?.focus()
+  }
+  const onKey = e => {
+    if (e.key === 'Escape') return close()
+    if (e.key !== 'Tab') return
+    const items = [...dialog.querySelectorAll(FOCUSABLE)].filter(n => n.offsetParent !== null)
+    if (!items.length) return
+    const first = items[0]
+    const last = items[items.length - 1]
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+  }
   overlay.addEventListener('click', e => { if (e.target === overlay || e.target.closest('[data-close]')) close() })
   document.addEventListener('keydown', onKey)
   document.body.appendChild(overlay)
   if (window.lucide) window.lucide.createIcons()
   return { el: overlay, close }
+}
+
+// Short confirmation at the bottom of the screen, announced to screen readers.
+// `action` adds one button (e.g. Undo) that also dismisses the toast.
+export function toast(message, { action, error = false } = {}) {
+  let region = document.getElementById('toasts')
+  if (!region) {
+    region = document.createElement('div')
+    region.id = 'toasts'
+    region.className = 'toasts'
+    region.setAttribute('role', 'status')
+    region.setAttribute('aria-live', 'polite')
+    document.body.appendChild(region)
+  }
+  const item = document.createElement('div')
+  item.className = `toast ${error ? 'is-error' : ''}`
+  item.innerHTML = `<span>${esc(message)}</span>${action ? `<button class="btn btn-ghost btn-sm">${esc(action.label)}</button>` : ''}`
+  const dismiss = () => item.remove()
+  item.querySelector('button')?.addEventListener('click', () => { dismiss(); action.onClick() })
+  region.appendChild(item)
+  setTimeout(dismiss, action || error ? 8000 : 4000)
+}
+
+// Turn store errors into a sentence that says what failed and what to do.
+export function friendlyError(error, action) {
+  const msg = error?.message || ''
+  if (!msg || /fetch|network|failed to|load failed/i.test(msg)) {
+    return `Couldn't ${action}. Check your connection and try again.`
+  }
+  return `Couldn't ${action}: ${msg}`
+}
+
+/**
+ * Validate visible fields, showing a message under each invalid one.
+ * Uses the inputs' own constraints (required, min, max, step).
+ * @param {HTMLFormElement} form
+ * @param {Object<string, string>} [missing]  message per field name when empty
+ * @returns {boolean} true when every visible field is valid
+ */
+export function validateForm(form, missing = {}) {
+  let firstBad = null
+  for (const input of form.querySelectorAll('input, select, textarea')) {
+    if (input.type === 'radio' || input.offsetParent === null) continue
+    const v = input.validity
+    let message = ''
+    if (v.valueMissing) message = missing[input.name] || 'Fill in this field.'
+    else if (v.badInput) message = 'Enter a number.'
+    else if (v.typeMismatch && input.type === 'email') message = 'Enter a full email address, like name@example.com.'
+    else if (v.rangeUnderflow || v.rangeOverflow) message = `Enter a value from ${input.min || 0} to ${input.max}.`
+    else if (v.stepMismatch) {
+      const places = (input.step.split('.')[1] || '').length
+      message = places ? `Use at most ${places} decimal place${places > 1 ? 's' : ''}.` : 'Enter a whole number.'
+    }
+    else if (!v.valid) message = input.validationMessage
+    setFieldError(input, message)
+    if (message && !firstBad) firstBad = input
+  }
+  firstBad?.focus()
+  return !firstBad
+}
+
+export function setFieldError(input, message) {
+  const id = `${input.id}-error`
+  let box = document.getElementById(id)
+  if (!message) {
+    box?.remove()
+    input.removeAttribute('aria-invalid')
+    input.removeAttribute('aria-describedby')
+    return
+  }
+  if (!box) {
+    box = document.createElement('div')
+    box.id = id
+    box.className = 'field-error'
+    input.insertAdjacentElement('afterend', box)
+  }
+  box.textContent = message
+  input.setAttribute('aria-invalid', 'true')
+  input.setAttribute('aria-describedby', id)
+}
+
+// Clear a field's error as soon as the rider edits it.
+export function clearErrorsOnInput(form) {
+  form.addEventListener('input', e => {
+    if (e.target.getAttribute?.('aria-invalid')) setFieldError(e.target, '')
+  })
 }
 
 export function refreshIcons() {
