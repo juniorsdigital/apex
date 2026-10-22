@@ -31,6 +31,20 @@ export async function sendMagicLink(email) {
   }
 }
 
+// The installed app (home screen) keeps its own storage, so a link opened from
+// the mail app signs in the browser instead. The code from the same email
+// signs in right here.
+export async function verifyEmailCode(email, token) {
+  const sb = await getClient()
+  if (!sb) return { error: new Error('Sign-in is not configured. See config.js.') }
+  try {
+    const { error } = await sb.auth.verifyOtp({ email, token, type: 'email' })
+    return { error }
+  } catch {
+    return { error: new Error("Couldn't reach the sign-in server. Check your connection and try again.") }
+  }
+}
+
 export async function signOut() {
   const sb = await getClient()
   if (sb) await sb.auth.signOut()

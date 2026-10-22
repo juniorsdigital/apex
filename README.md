@@ -35,6 +35,17 @@ docs/                  design notes
 2. Put the project URL and publishable key in `apex-athlete/config.js`.
 3. In Supabase → Authentication → URL Configuration, add your site URL (e.g. `https://apexathlete.vercel.app`) and `http://localhost:8080` as redirect URLs.
 
+4. In Supabase → Authentication → Emails → Magic Link, add the code to the template (for example `Or enter this code: {{ .Token }}`). The installed phone app keeps its own storage, so on iPhone the link signs in Safari rather than the app; the code signs in the app.
+
+## Install on a phone
+
+Apex is a Progressive Web App (`manifest.webmanifest`, `sw.js`, `icons/`). Open the site, then:
+
+- **iPhone:** Safari → Share → Add to Home Screen.
+- **Android:** Chrome → menu → Install app.
+
+It opens full screen, and the app shell loads offline. The service worker fetches app files from the network first, so a deploy shows up on the next launch. Bump `VERSION` in `sw.js` when you add or rename files.
+
 ## Run locally
 
 ```bash
