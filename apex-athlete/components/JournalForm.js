@@ -1,6 +1,7 @@
-// Daily journal: body check-in, how the workout felt, headspace for the next race.
+// Daily journal: body check-in, how each workout felt, headspace for the next race.
+// On days with more than one session, each session gets its own feel and note.
 import { renderApp, saveJournal } from '../app.js'
-import { raceInfo, daysUntil } from '../lib/plan.js'
+import { raceInfo, daysUntil, kindById } from '../lib/plan.js'
 import { esc, dateKey, toast, friendlyError } from '../lib/util.js'
 
 export const BODY = [
@@ -25,6 +26,11 @@ export function renderJournalForm(state, date) {
   const body = state.readiness[date] || {}
   const race = nextRace(state.plan, date)
   const isToday = date === dateKey()
+  const sessions = state.plan?.byDate[date]?.sessions || []
+  const multi = sessions.length > 1
+  // Entries written before a day had separate sessions count for the first one.
+  const logs = entry.sessions || (entry.workout_feel || entry.workout_note
+    ? { s1: { feel: entry.workout_feel, note: entry.workout_note } } : {})
 
   const scale = (name, labels, value) => `
     <div class="feel-scale" role="radiogroup" aria-labelledby="${id}-${name}-label">
@@ -56,12 +62,28 @@ export function renderJournalForm(state, date) {
       </div>
     </fieldset>
 
-    <fieldset class="journal-block">
-      <legend id="${id}-workout_feel-label">How did the workout feel?</legend>
-      ${scale('workout_feel', WORKOUT_FEEL, entry.workout_feel)}
-      <label class="visually-hidden" for="${id}-wn">Workout notes</label>
-      <textarea class="input" id="${id}-wn" name="workout_note" rows="2" placeholder="Legs, pacing, fueling, what clicked or didn't">${esc(entry.workout_note || '')}</textarea>
-    </fieldset>
+    ${multi ? `
+      <fieldset class="journal-block">
+        <legend>How did the workouts feel? <span class="faint">(${sessions.length} sessions)</span></legend>
+        <div class="session-logs">
+          ${sessions.map(s => `
+            <div class="session-log" style="--kind:${kindById(s.kind).color}">
+              <p class="session-log-head" id="${id}-feel_${s.id}-label">
+                <span class="session-step" aria-hidden="true">${s.n}</span>
+                <b>${esc(s.label)}</b><span class="faint">${esc(s.title)}</span>
+              </p>
+              ${scale(`feel_${s.id}`, WORKOUT_FEEL, logs[s.id]?.feel)}
+              <label class="visually-hidden" for="${id}-n-${s.id}">${esc(s.label)} notes</label>
+              <textarea class="input" id="${id}-n-${s.id}" name="note_${s.id}" rows="2" placeholder="${s.kind === 'strength' ? 'Loads, reps in reserve, anything that niggled' : "Legs, pacing, fueling, what clicked or didn't"}">${esc(logs[s.id]?.note || '')}</textarea>
+            </div>`).join('')}
+        </div>
+      </fieldset>` : `
+      <fieldset class="journal-block">
+        <legend id="${id}-workout_feel-label">How did the workout feel?</legend>
+        ${scale('workout_feel', WORKOUT_FEEL, entry.workout_feel)}
+        <label class="visually-hidden" for="${id}-wn">Workout notes</label>
+        <textarea class="input" id="${id}-wn" name="workout_note" rows="2" placeholder="Legs, pacing, fueling, what clicked or didn't">${esc(entry.workout_note || '')}</textarea>
+      </fieldset>`}
 
     <fieldset class="journal-block">
       <legend id="${id}-headspace-label">${race
@@ -96,7 +118,7 @@ export function renderJournalForm(state, date) {
     const t = k => fd.get(k).trim() || null
     const bodyValues = Object.fromEntries(BODY.map(m => [m.id, n(m.id)]))
     const journal = {
-      workout_feel: n('workout_feel'), workout_note: t('workout_note'),
+      ...(multi ? sessionLogs(sessions, n, t) : { workout_feel: n('workout_feel'), workout_note: t('workout_note'), sessions: null }),
       headspace: n('headspace'), headspace_note: t('headspace_note'), note: t('note')
     }
     const btn = form.querySelector('[type="submit"]')
@@ -121,10 +143,29 @@ export function renderJournalForm(state, date) {
     status.className = 'inline-status is-success'
     status.textContent = 'Saved'
     toast('Journal entry saved')
+    form.dispatchEvent(new CustomEvent('journal-saved', { bubbles: true, detail: { date } }))
     // Refresh the page underneath (calendar dots, journal list) but not this form.
     if (!form.closest('.modal')) return
     renderApp()
   })
 
   return form
+}
+
+// Per-session feel and notes, plus a day-level summary in workout_feel (the
+// average, for the trend line) and workout_note (each note under its label).
+function sessionLogs(sessions, n, t) {
+  const logs = {}
+  for (const s of sessions) {
+    const feel = n(`feel_${s.id}`), note = t(`note_${s.id}`)
+    if (feel || note) logs[s.id] = { feel, note, title: s.title, label: s.label }
+  }
+  const list = Object.values(logs)
+  const feels = list.map(l => l.feel).filter(Boolean)
+  const notes = list.filter(l => l.note).map(l => `${l.label}: ${l.note}`)
+  return {
+    workout_feel: feels.length ? Math.round(feels.reduce((a, f) => a + f, 0) / feels.length) : null,
+    workout_note: notes.length ? notes.join('\n') : null,
+    sessions: list.length ? logs : null
+  }
 }

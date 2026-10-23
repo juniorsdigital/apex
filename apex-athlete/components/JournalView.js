@@ -65,10 +65,17 @@ function entryHtml(state, date) {
         <h2>${formatDate(date, { weekday: 'long', month: 'long', day: 'numeric' })}</h2>
         <button class="btn btn-ghost btn-sm" data-date="${date}" aria-label="Edit entry for ${formatDate(date, { weekday: 'long', month: 'long', day: 'numeric' })}">Edit</button>
       </header>
-      ${day ? `<p class="entry-plan">${kindChip(day)}${day.title.toLowerCase() !== day.dayType.toLowerCase() ? ` <span class="muted small">${esc(day.title)}</span>` : ''}</p>` : ''}
+      ${day ? `<p class="entry-plan">${day.sessions.length > 1
+        ? day.sessions.map(kindChip).join('')
+        : `${kindChip(day)}${day.title.toLowerCase() !== day.dayType.toLowerCase() ? ` <span class="muted small">${esc(day.title)}</span>` : ''}`}</p>` : ''}
       <dl class="entry-rows">
         ${row('Body', bodyText, '')}
-        ${row('Workout', WORKOUT_FEEL[j.workout_feel - 1], j.workout_note)}
+        ${j.sessions
+          ? Object.entries(j.sessions).map(([id, log]) => {
+            const s = day?.sessions.find(x => x.id === id)
+            return row(esc(s?.label || log.label || 'Workout'), WORKOUT_FEEL[log.feel - 1], log.note)
+          }).join('')
+          : row('Workout', WORKOUT_FEEL[j.workout_feel - 1], j.workout_note)}
         ${row('Headspace', HEADSPACE[j.headspace - 1], j.headspace_note)}
         ${row('Other', '', j.note)}
       </dl>

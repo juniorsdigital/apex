@@ -4,7 +4,10 @@ import { getClient } from './supabase.js'
 
 const GUEST_KEY = 'apex.guest.v2'
 
-export const JOURNAL_FIELDS = ['workout_feel', 'workout_note', 'headspace', 'headspace_note', 'note']
+// `sessions` holds per-session feel and notes on days with more than one
+// session: { s1: { feel, note, title, label }, ... }. workout_feel and
+// workout_note still carry the day as a whole.
+export const JOURNAL_FIELDS = ['workout_feel', 'workout_note', 'sessions', 'headspace', 'headspace_note', 'note']
 
 function pickJournal(entry) {
   const out = {}
@@ -77,6 +80,20 @@ export function createGuestStore() {
 
 // ─── CLOUD (Supabase, signed in) ─────────────────────────────────────────────
 
+// A project set up before journal.sessions existed rejects that column. Save
+// without it rather than fail: the day's feel and notes still land in
+// workout_feel and workout_note. Run supabase/schema.sql again to add it.
+const noSessionsColumn = error => /sessions/.test(error?.message || '') && /column|schema cache/i.test(error.message)
+const withoutSessions = row => { const { sessions, ...rest } = row; return rest }
+
+async function upsertJournal(sb, rows) {
+  let { error } = await sb.from('journal').upsert(rows, { onConflict: 'user_id,entry_date' })
+  if (noSessionsColumn(error)) {
+    ({ error } = await sb.from('journal').upsert([].concat(rows).map(withoutSessions), { onConflict: 'user_id,entry_date' }))
+  }
+  return { error }
+}
+
 export function createCloudStore(user) {
   const uid = user.id
 
@@ -111,9 +128,7 @@ export function createCloudStore(user) {
 
     async saveJournal(date, entry) {
       const sb = await getClient()
-      const { error } = await sb.from('journal')
-        .upsert({ user_id: uid, entry_date: date, ...pickJournal(entry), updated_at: new Date().toISOString() }, { onConflict: 'user_id,entry_date' })
-      return { error }
+      return upsertJournal(sb, { user_id: uid, entry_date: date, ...pickJournal(entry), updated_at: new Date().toISOString() })
     },
 
     async saveReadiness(date, values) {
@@ -146,7 +161,7 @@ export function createCloudStore(user) {
       const journalRows = Object.entries(guest.journal)
         .map(([entry_date, v]) => ({ user_id: uid, entry_date, ...pickJournal(v) }))
       if (journalRows.length) {
-        const { error } = await sb.from('journal').upsert(journalRows, { onConflict: 'user_id,entry_date' })
+        const { error } = await upsertJournal(sb, journalRows)
         if (error) return { error }
       }
       const readinessRows = Object.entries(guest.readiness)

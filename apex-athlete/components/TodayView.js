@@ -1,10 +1,10 @@
-// Today — countdown to the goal race, today's session, this week, and the journal.
+// Today — countdown to the goal race, today's sessions, this week, and the journal.
 // Works for guests (stored in this browser) and signed-in riders alike.
 import { navigate, reload } from '../app.js'
 import { guestDataCount } from '../lib/store.js'
 import { kindById, raceInfo, daysUntil, plannedHours, formatHours } from '../lib/plan.js'
-import { esc, dateKey, addDays, formatDate, toast, friendlyError } from '../lib/util.js'
-import { sessionHtml, kindChip, openDayModal } from './DaySession.js'
+import { esc, dateKey, addDays, formatDate, toast, friendlyError, refreshIcons } from '../lib/util.js'
+import { dayHtml, kindChip, openDayModal, sessionPips, sessionTitles, sessionsLabel, loggedFeel } from './DaySession.js'
 import { renderJournalForm, nextRace } from './JournalForm.js'
 import { renderPlanDrop } from './PlanUpload.js'
 import { seasonProfileHtml } from './SeasonProfile.js'
@@ -56,7 +56,16 @@ export function renderToday(state) {
       </section>` : ''}
   `
 
-  wrap.querySelector('#plan-slot').replaceWith(plan ? planBlock(state, plan, today) : renderPlanDrop())
+  let planEl = plan ? planBlock(state, plan, today) : renderPlanDrop()
+  wrap.querySelector('#plan-slot').replaceWith(planEl)
+  // Saving the journal marks today's sessions as logged without redrawing the form.
+  wrap.addEventListener('journal-saved', e => {
+    if (!plan || e.detail.date !== today || !planEl.isConnected) return
+    const fresh = planBlock(state, plan, today)
+    planEl.replaceWith(fresh)
+    planEl = fresh
+    refreshIcons()
+  })
   wrap.querySelector('#journal-slot').appendChild(renderJournalForm(state, today))
   wrap.querySelector('#cta-signin')?.addEventListener('click', () => navigate('login'))
 
@@ -91,6 +100,9 @@ function planBlock(state, plan, today) {
   const day = plan.byDate[today]
   const upcoming = plan.days.filter(d => d.date > today).slice(0, 3)
   const weekDays = week ? week.days : []
+  const entry = state.journal[today]
+  const sessions = day ? day.sessions : []
+  const logged = day ? sessions.filter(s => loggedFeel(entry, day, s)).length : 0
 
   const countdown = toGoal > 0
     ? `<span class="countdown-num">${toGoal}</span><span class="countdown-unit">${toGoal === 1 ? 'day' : 'days'} to ${/nationals/i.test(goal.dayType) ? 'Nationals' : esc(goalInfo.name)}</span>`
@@ -114,8 +126,11 @@ function planBlock(state, plan, today) {
 
     <div class="today-grid">
       <section class="section" aria-labelledby="session-h">
-        <div class="section-head"><h2 id="session-h">Today's session</h2></div>
-        ${day ? sessionHtml(day) : `
+        <div class="section-head">
+          <h2 id="session-h">${sessions.length > 1 ? "Today's sessions" : "Today's session"}</h2>
+          ${sessions.length > 1 && logged ? `<span class="faint small">${logged} of ${sessions.length} logged</span>` : ''}
+        </div>
+        ${day ? dayHtml(day, { entry }) : `
           <div class="card empty">
             <p>${today < plan.start ? `Your plan starts ${formatDate(plan.start, { weekday: 'long', month: 'long', day: 'numeric' })}.` : 'Your plan has finished.'}</p>
             <p>${today < plan.start ? 'Ride how you like until then.' : 'Load a new plan from the Plan page when you have one.'}</p>
@@ -131,8 +146,8 @@ function planBlock(state, plan, today) {
                 <span class="upnext-date">${formatDate(d.date, { weekday: 'short' })}<b>${formatDate(d.date, { day: 'numeric' })}</b></span>
                 <span class="upnext-body">
                   ${kindChip(d)}
-                  <span class="upnext-title">${esc(d.title)}</span>
-                  ${plannedHours(d) ? `<span class="faint small">${formatHours(plannedHours(d))}</span>` : ''}
+                  <span class="upnext-title">${esc(sessionTitles(d))}</span>
+                  ${plannedHours(d) || d.sessions.length > 1 ? `<span class="upnext-meta faint small">${[plannedHours(d) && formatHours(plannedHours(d)), d.sessions.length > 1 && `${d.sessions.length} sessions`].filter(Boolean).join(', ')}</span>` : ''}
                 </span>
               </button>
             </li>`).join('') || `<li class="muted small">Nothing after today.</li>`}
@@ -150,11 +165,12 @@ function planBlock(state, plan, today) {
           ${weekDays.map(d => `
             <li>
               <button class="week-cell ${d.date === today ? 'is-today' : ''} ${d.date < today ? 'is-past' : ''}" data-date="${d.date}" style="--kind:${kindById(d.kind).color}"
-                aria-label="${formatDate(d.date, { weekday: 'long' })}: ${esc(d.dayType)}, ${formatHours(plannedHours(d))}${state.journal[d.date] ? ', journal written' : ''}">
+                aria-label="${formatDate(d.date, { weekday: 'long' })}: ${esc(d.dayType)}, ${formatHours(plannedHours(d))}${esc(sessionsLabel(d))}${state.journal[d.date] ? ', journal written' : ''}">
                 <span class="week-cell-day">${formatDate(d.date, { weekday: 'short' })}</span>
                 <span class="week-cell-bar" style="--h:${Math.max(6, (plannedHours(d) / 6) * 100)}%"></span>
                 <span class="week-cell-hrs tabular">${plannedHours(d) ? formatHours(plannedHours(d)) : 'Off'}</span>
                 <span class="week-cell-type">${esc(kindById(d.kind).label)}</span>
+                ${sessionPips(d)}
                 ${state.journal[d.date] ? '<span class="week-cell-dot" aria-hidden="true"></span>' : ''}
               </button>
             </li>`).join('')}

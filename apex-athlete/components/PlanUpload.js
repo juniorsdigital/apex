@@ -13,7 +13,8 @@ async function loadFile(file) {
   if (file.size > MAX_BYTES) return toast('That file is over 5 MB, too big for a plan.', { error: true })
   const { plan, error } = await savePlan(file.name, await file.text())
   if (error) return toast(friendlyError(error, 'load that plan'), { error: true })
-  toast(`Plan loaded: ${plan.days.length} days, ${formatDate(plan.start, { month: 'short', day: 'numeric' })} to ${formatDate(plan.end, { month: 'short', day: 'numeric' })}`)
+  const doubles = plan.days.filter(d => d.sessions.length > 1).length
+  toast(`Plan loaded: ${plan.days.length} days${doubles ? ` (${doubles} with more than one session)` : ''}, ${formatDate(plan.start, { month: 'short', day: 'numeric' })} to ${formatDate(plan.end, { month: 'short', day: 'numeric' })}`)
 }
 
 export function choosePlanFile() {
@@ -31,7 +32,7 @@ export function renderPlanDrop() {
   zone.innerHTML = `
     <i data-lucide="file-up" aria-hidden="true"></i>
     <h2>Load your training plan</h2>
-    <p class="muted">Drop the plan CSV here, or choose the file. Each row is a day with its date, workout and notes.
+    <p class="muted">Drop the plan CSV here, or choose the file. Each row is a day with its date, workout and notes; rows that share a date are that day's sessions.
       When your plan changes, load the new file and it replaces this one. Journal entries are kept.</p>
     <button class="btn btn-primary" type="button">Choose plan file</button>
   `

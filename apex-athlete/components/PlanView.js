@@ -1,9 +1,9 @@
-// Plan — the training plan as a month calendar. Tap a day for the full session
+// Plan — the training plan as a month calendar. Tap a day for its sessions
 // and that day's journal entry. Load a new CSV here when the plan changes.
 import { renderApp } from '../app.js'
 import { KINDS, kindById, plannedHours, formatHours } from '../lib/plan.js'
 import { esc, dateKey, parseKey, addDays, startOfWeek, formatDate } from '../lib/util.js'
-import { openDayModal } from './DaySession.js'
+import { openDayModal, sessionPips, sessionsLabel } from './DaySession.js'
 import { choosePlanFile, renderPlanDrop } from './PlanUpload.js'
 import { phaseColor } from './SeasonProfile.js'
 
@@ -63,7 +63,7 @@ export function renderPlan(state) {
         const day = plan.byDate[key]
         const k = day ? kindById(day.kind) : null
         const written = !!state.journal[key]
-        const label = `${d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}${day ? `: ${day.dayType}, ${formatHours(plannedHours(day))}` : ''}${written ? ', journal written' : ''}`
+        const label = `${d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}${day ? `: ${day.dayType}, ${formatHours(plannedHours(day))}${sessionsLabel(day)}` : ''}${written ? ', journal written' : ''}`
         return `
           <button class="cal-day ${d.getMonth() !== month.getMonth() ? 'other' : ''} ${key === today ? 'today' : ''} ${key < today ? 'past' : ''} ${day ? 'kind-' + day.kind : 'empty'}"
             data-date="${key}" ${k ? `style="--kind:${k.color}"` : ''} aria-label="${esc(label)}" ${key === today ? 'aria-current="date"' : ''}>
@@ -73,14 +73,18 @@ export function renderPlan(state) {
             </span>
             ${day ? `
               <span class="cal-type">${esc(day.kind === 'race' ? day.title : day.dayType)}</span>
-              <span class="cal-hrs tabular">${plannedHours(day) ? formatHours(plannedHours(day)) : 'Off'}</span>` : ''}
+              <span class="cal-foot">
+                <span class="cal-hrs tabular">${plannedHours(day) ? formatHours(plannedHours(day)) : 'Off'}</span>
+                ${sessionPips(day)}
+              </span>` : ''}
           </button>`
       }).join('')}
     </div>
 
     <div class="row-between">
       <div class="legend faint small">
-        ${KINDS.map(k => `<span><i class="legend-dot" style="background:${k.color}"></i>${k.label}</span>`).join('')}
+        ${KINDS.map(k => `<span><i class="legend-dot ${k.id === 'strength' ? 'is-square' : ''}" style="background:${k.color}"></i>${k.label}</span>`).join('')}
+        <span><span class="session-pips" aria-hidden="true"><i class="session-pip" style="--kind:var(--color-text-faint)"></i><i class="session-pip" style="--kind:var(--color-text-faint)"></i></span> More than one session</span>
         <span><i data-lucide="notebook-pen" class="icon-xs" aria-hidden="true"></i> Journal written</span>
       </div>
       <div class="row">

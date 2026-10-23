@@ -53,18 +53,24 @@ create table if not exists public.training_plans (
   uploaded_at  timestamptz not null default now()
 );
 
--- Daily journal: how the workout felt and headspace for the next race (1 to 5), plus notes.
+-- Daily journal: how the workout(s) felt and headspace for the next race (1 to 5), plus notes.
 create table if not exists public.journal (
   user_id         uuid not null default auth.uid() references auth.users (id) on delete cascade,
   entry_date      date not null,
   workout_feel    smallint check (workout_feel between 1 and 5),
   workout_note    text,
+  sessions        jsonb,
   headspace       smallint check (headspace between 1 and 5),
   headspace_note  text,
   note            text,
   updated_at      timestamptz not null default now(),
   primary key (user_id, entry_date)
 );
+
+-- Days with more than one session: feel (1 to 5) and notes per session,
+-- { "s1": { "feel": 4, "note": "...", "title": "HIT", "label": "Ride" }, ... }.
+-- workout_feel is then the day's average and workout_note every note together.
+alter table public.journal add column if not exists sessions jsonb;
 
 alter table public.profiles  enable row level security;
 alter table public.rides     enable row level security;
