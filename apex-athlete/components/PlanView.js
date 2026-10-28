@@ -6,6 +6,7 @@ import { esc, dateKey, parseKey, addDays, startOfWeek, formatDate } from '../lib
 import { openDayModal, sessionPips, sessionsLabel } from './DaySession.js'
 import { choosePlanFile, renderPlanDrop } from './PlanUpload.js'
 import { phaseColor } from './SeasonProfile.js'
+import { slideOut, slideIn, swipeable } from '../lib/motion.js'
 
 let monthOffset = 0
 
@@ -94,11 +95,23 @@ export function renderPlan(state) {
     </div>
   `
 
-  wrap.querySelectorAll('[data-shift]').forEach(btn => btn.addEventListener('click', () => {
-    const n = Number(btn.dataset.shift)
-    monthOffset = n === 0 ? 0 : monthOffset + n
+  // The month slides out the way it's going and the next one slides in behind it.
+  let moving = false
+  const shiftMonth = async n => {
+    const next = n === 0 ? 0 : monthOffset + n
+    if (moving || next === monthOffset) return
+    const dir = Math.sign(next - monthOffset)
+    moving = true
+    await slideOut(wrap.querySelector('.calendar'), dir)
+    monthOffset = next
     renderApp()
-  }))
+    slideIn(document.querySelector('.calendar'), dir)
+  }
+  wrap.querySelectorAll('[data-shift]').forEach(btn => btn.addEventListener('click', () => shiftMonth(Number(btn.dataset.shift))))
+  swipeable(wrap.querySelector('.calendar'), {
+    canGo: dir => dir > 0 ? canNext : canPrev,
+    onSwipe: shiftMonth
+  })
   wrap.querySelector('.calendar').addEventListener('click', e => {
     const cell = e.target.closest('[data-date]')
     if (cell) openDayModal(state, cell.dataset.date)

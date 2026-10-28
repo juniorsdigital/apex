@@ -47,6 +47,8 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([t
 
 // Modal dialog: labelled by its first heading, keeps Tab inside, and hands
 // focus back to whatever opened it (or the page heading if that was re-rendered).
+// It fades and rises in, and plays the reverse before it leaves. On phones it
+// is a bottom sheet that can be dragged down by its header to close.
 export function openModal(innerHtml, { width = 480 } = {}) {
   const opener = document.activeElement
   const openerId = opener?.id
@@ -60,9 +62,15 @@ export function openModal(innerHtml, { width = 480 } = {}) {
     dialog.setAttribute('aria-labelledby', heading.id)
   }
 
+  let closed = false
   const close = () => {
-    overlay.remove()
+    if (closed) return
+    closed = true
     document.removeEventListener('keydown', onKey)
+    overlay.classList.add('is-closing')
+    // getAnimations() flushes styles, so it sees the closing animations.
+    const done = Promise.allSettled(overlay.getAnimations?.({ subtree: true }).map(a => a.finished) || [])
+    Promise.race([done, new Promise(r => setTimeout(r, 400))]).then(() => overlay.remove())
     const target = opener?.isConnected ? opener
       : (openerId && document.getElementById(openerId)) || document.querySelector('.page-title')
     target?.focus()
@@ -79,9 +87,42 @@ export function openModal(innerHtml, { width = 480 } = {}) {
   }
   overlay.addEventListener('click', e => { if (e.target === overlay || e.target.closest('[data-close]')) close() })
   document.addEventListener('keydown', onKey)
+  dragToClose(dialog, close)
   document.body.appendChild(overlay)
   if (window.lucide) window.lucide.createIcons()
   return { el: overlay, close }
+}
+
+// Bottom sheets (phones) follow the finger down from the header; far or fast enough closes.
+function dragToClose(dialog, close) {
+  const sheet = window.matchMedia('(max-width: 768px)')
+  let start = null
+  let dy = 0
+  dialog.addEventListener('touchstart', e => {
+    start = null
+    if (!sheet.matches || e.touches.length !== 1 || !e.target.closest('.modal-head')) return
+    start = { y: e.touches[0].clientY, x: e.touches[0].clientX, time: e.timeStamp }
+    dy = 0
+  }, { passive: true })
+  dialog.addEventListener('touchmove', e => {
+    if (!start) return
+    const t = e.touches[0]
+    dy = t.clientY - start.y
+    if (Math.abs(t.clientX - start.x) > Math.abs(dy) && !dialog.classList.contains('is-dragging')) { start = null; return }
+    e.preventDefault()
+    dialog.classList.add('is-dragging')
+    dialog.style.transform = `translateY(${Math.max(0, dy)}px)`
+  }, { passive: false })
+  const end = e => {
+    if (!start) return
+    const speed = dy / Math.max(1, e.timeStamp - start.time)
+    start = null
+    dialog.classList.remove('is-dragging')
+    if (e.type === 'touchend' && (dy > Math.min(140, dialog.offsetHeight * 0.3) || (speed > 0.5 && dy > 40))) return close()
+    dialog.style.transform = ''
+  }
+  dialog.addEventListener('touchend', end)
+  dialog.addEventListener('touchcancel', end)
 }
 
 // Short confirmation at the bottom of the screen, announced to screen readers.
