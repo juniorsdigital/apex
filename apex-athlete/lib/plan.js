@@ -11,10 +11,10 @@ export const KINDS = [
   { id: 'rest',      label: 'Rest',       color: 'var(--kind-rest)',      test: /^(rest|off)\b/i },
   { id: 'race',      label: 'Race',       color: 'var(--kind-race)',      test: /^race$|nationals|e-fondo|gran fondo/i },
   { id: 'test',      label: 'Test',       color: 'var(--kind-test)',      test: /ftp test/i },
-  { id: 'rehearsal', label: 'Rehearsal',  color: 'var(--kind-rehearsal)', test: /rehearsal|race-pace|durability test/i },
+  { id: 'rehearsal', label: 'Rehearsal',  color: 'var(--kind-rehearsal)', test: /rehearsal|race-pace|durability test|fuel sim|\d+\s*mi sim/i },
   { id: 'easy',      label: 'Easy',       color: 'var(--kind-easy)',      test: /travel|shakeout|pre-ride|preview|^easy|^recovery/i },
-  { id: 'hard',      label: 'Intervals',  color: 'var(--kind-hard)',      test: /hit|shock|sprint|opener|bonus/i },
-  { id: 'threshold', label: 'Threshold',  color: 'var(--kind-threshold)', test: /threshold|sweet spot|moderate/i },
+  { id: 'hard',      label: 'Intervals',  color: 'var(--kind-hard)',      test: /hit|shock|sprint|opener|bonus|^30\d\d\b|vo2/i },
+  { id: 'threshold', label: 'Threshold',  color: 'var(--kind-threshold)', test: /threshold|sweet spot|moderate|^z[34]\b|^ss\b/i },
   { id: 'strength',  label: 'Strength',   color: 'var(--kind-strength)',  test: /strength|lift|gym|weights/i },
   { id: 'endurance', label: 'Endurance',  color: 'var(--kind-endurance)', test: /./ }
 ]
@@ -70,6 +70,10 @@ function shortTitle(workout) {
   const head = workout.split(/\s+-\s+|[:.(]/)[0].trim()
   return head.length > 60 ? head.slice(0, 57) + '…' : head
 }
+
+// A short Day_Type ("3015 x3", "Z2 3h", "Lift A") is the session's name; a long
+// one is a category, so the name comes from the head of the workout instead.
+const nameOf = r => (r.Day_Type && r.Day_Type.length <= 32 ? r.Day_Type : shortTitle(r.Workout))
 
 // A day can hold more than one session. They come from rows that share a
 // date (in file order), or from inside one row: a lift in the Strength column
@@ -136,7 +140,7 @@ function rowSessions(r) {
   const s = {
     ...blankSession(),
     label: isNaN(Number(r.Session)) ? r.Session || '' : '', time: r.Time || '',
-    kind: kind.id, dayType: r.Day_Type || kind.label, workout: r.Workout, title: shortTitle(r.Workout),
+    kind: kind.id, dayType: r.Day_Type || kind.label, workout: r.Workout, title: nameOf(r),
     venue: dash(r.Venue), hoursOutdoor: num(r.Hrs_Outdoor), hoursIndoor: num(r.Hrs_Indoor),
     intensity: dash(r.Intensity), fueling: dash(r.Fueling),
     planB: dash(r.Alt_If_Recovery_Lacking).replace(/^if recovery is lacking:\s*/i, ''),
@@ -207,7 +211,7 @@ function buildDay(date, rows) {
     dayType: types.length ? types.join(' + ') : kindById(kind).label,
     kind,
     workout: first.Workout,
-    title: shortTitle(first.Workout),
+    title: nameOf(first),
     venue: dash(first.Venue),
     hoursOutdoor: sumOrNull(rows.map(r => num(r.Hrs_Outdoor))),
     hoursIndoor: sumOrNull(rows.map(r => num(r.Hrs_Indoor))),
@@ -267,7 +271,7 @@ export function parsePlan(text) {
     p.hours += w.hours
   }
 
-  const keyDates = days.filter(d => d.kind === 'race' || d.kind === 'test' || /full-distance|durability test/i.test(d.dayType))
+  const keyDates = days.filter(d => d.kind === 'race' || d.kind === 'test' || /full-distance|durability test|\d+\s*mi sim/i.test(d.dayType))
   const goal = days.find(d => /nationals/i.test(d.dayType)) || [...days].reverse().find(d => d.kind === 'race') || days[days.length - 1]
 
   return { days, byDate, weeks, phases, keyDates, goal, start: days[0].date, end: days[days.length - 1].date }
