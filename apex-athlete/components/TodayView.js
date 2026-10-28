@@ -119,7 +119,7 @@ function planBlock(state, plan, today) {
       <dl class="countdown-facts">
         ${week ? `<div><dt>Week</dt><dd>${weekLabel(week, plan)}</dd></div>` : ''}
         ${week ? `<div><dt>Phase</dt><dd>${esc(week.phase)}</dd></div>` : ''}
-        ${race && race.day !== goal ? `<div><dt>Next race</dt><dd>${esc(race.name)}, ${daysUntil(race.day.date, today)} days</dd></div>` : ''}
+        ${race && race.day !== goal ? `<div><dt>Next race</dt><dd>${esc(race.name)}, ${daysUntil(race.day.date, today) === 0 ? 'today' : daysUntil(race.day.date, today) === 1 ? 'tomorrow' : `in ${daysUntil(race.day.date, today)} days`}</dd></div>` : ''}
       </dl>
       ${seasonProfileHtml(plan, { labels: false })}
     </section>

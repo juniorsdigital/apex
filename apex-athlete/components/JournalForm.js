@@ -87,7 +87,7 @@ export function renderJournalForm(state, date) {
 
     <fieldset class="journal-block">
       <legend id="${id}-headspace-label">${race
-        ? `Headspace for ${esc(race.name)} <span class="faint">(${daysUntil(race.day.date, date)} days out)</span>`
+        ? `Headspace for ${esc(race.name)} <span class="faint">(${daysUntil(race.day.date, date) === 0 ? 'today' : daysUntil(race.day.date, date) === 1 ? 'tomorrow' : `${daysUntil(race.day.date, date)} days out`})</span>`
         : 'Headspace'}</legend>
       ${scale('headspace', HEADSPACE, entry.headspace)}
       <label class="visually-hidden" for="${id}-hn">Headspace notes</label>

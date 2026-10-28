@@ -290,8 +290,20 @@ export function raceInfo(day) {
   const inParens = (head.match(/\(([^)]+)\)/) || [])[1] || ''
   const place = /^[^;~]{2,30},[^;~]{1,10}$/.test(inParens) ? inParens
     : ((rest.match(/,\s*([^,(]+?)\s*(?:\(|$)/) || [])[1] || '')
-  const name = head.replace(/\s*\([^)]*\)\s*/g, ' ').trim()
-  return { name: titleCase(name) + (optional ? ' (optional)' : ''), place: place.trim() }
+  let name = titleCase(head.replace(/\s*\([^)]*\)\s*/g, ' ').trim())
+  // Indoor races often have no name, only the workout ("WU 30 min @ 140-210 W
+  // with ... · race 2 timed segments ..."). Name those from the day instead.
+  if (looksLikeWorkout(name)) return { name: fallbackName(day) + (optional ? ' (optional)' : ''), place: '' }
+  return { name: clip(name, 64) + (optional ? ' (optional)' : ''), place: clip(place.trim(), 40) }
+}
+
+const looksLikeWorkout = s => s.length > 64 || /@|·|\b\d+\s*(?:w|min|bpm|rpm)\b|\b\d+\s*[x×]\s*\d/i.test(s)
+const clip = (s, n) => (s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s)
+
+function fallbackName(day) {
+  const title = day.title && !looksLikeWorkout(day.title) ? day.title : ''
+  const type = day.dayType && !looksLikeWorkout(day.dayType) ? day.dayType : ''
+  return clip(title || type || 'Race', 40)
 }
 
 /** Outdoor events worth a flag on the route (not the indoor E-Fondos). */
