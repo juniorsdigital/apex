@@ -74,7 +74,7 @@ export function seasonProfileHtml(plan, { labels = true } = {}) {
       </div>
       ${labels ? `
         <div class="season-labels" aria-hidden="true">
-          ${races.map(r => `
+          ${races.filter(r => r === plan.goal || xOf(plan.goal.date) - xOf(r.date) > W * 0.1).map(r => `
             <span class="season-label ${r === plan.goal ? 'is-goal' : ''}" style="left:${pct(xOf(r.date))}">
               <b>${esc(shortRace(r))}</b>${formatDate(r.date, { month: 'short', day: 'numeric' })}
             </span>`).join('')}
