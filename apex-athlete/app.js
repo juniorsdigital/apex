@@ -2,6 +2,7 @@ import { getSessionUser, onAuthStateChange } from './lib/supabase.js'
 import { createGuestStore, createCloudStore } from './lib/store.js'
 import { parsePlan } from './lib/plan.js'
 import { esc, refreshIcons } from './lib/util.js'
+import { enterPage } from './lib/motion.js'
 import { renderLogin } from './components/LoginView.js'
 import { renderSidebar, NAV_ITEMS, LOGO_SVG } from './components/Sidebar.js'
 import { renderHeader } from './components/Header.js'
@@ -28,6 +29,7 @@ export const state = {
 }
 
 const root = document.getElementById('app')
+let shownView = null  // the view on screen, so only a change of page animates
 
 export function navigate(view) {
   state.currentView = !state.user && !GUEST_VIEWS.includes(view) ? 'login' : view
@@ -80,6 +82,8 @@ export function renderApp() {
     root.replaceChildren(renderLogin())
     document.title = 'Sign in · Apex'
     refreshIcons()
+    if (shownView !== 'login') enterPage(root.firstElementChild)
+    shownView = 'login'
     return
   }
 
@@ -107,12 +111,15 @@ export function renderApp() {
     journey: renderJourney,
     profile: renderProfile
   }
-  main.appendChild((views[state.currentView] || renderToday)(state))
+  const view = (views[state.currentView] || renderToday)(state)
+  main.appendChild(view)
   shell.appendChild(main)
 
   root.replaceChildren(shell)
   document.title = `${NAV_ITEMS.find(n => n.id === state.currentView)?.label || 'Profile'} · Apex`
   refreshIcons()
+  if (shownView !== state.currentView) enterPage(view)
+  shownView = state.currentView
 }
 
 async function setUser(user) {

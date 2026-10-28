@@ -23,6 +23,7 @@
   --radius-chip: 999px;
 
   --transition: 140ms ease;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --font: 'Archivo', system-ui, sans-serif;
 
   /* Light */
@@ -280,9 +281,26 @@ textarea.input { resize: vertical; line-height: 1.45; }
 
 
 /* ─── MODAL ───────────────────────────────────────────────────────────── */
-.modal-overlay { position: fixed; inset: 0; z-index: 100; background: #0b1220a6; display: flex; align-items: center; justify-content: center; padding: var(--space-4); }
-.modal { width: 100%; max-height: calc(100dvh - 2rem); overflow-y: auto; box-shadow: var(--shadow-overlay); border: none; }
-.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-5); }
+.modal-overlay { position: fixed; inset: 0; z-index: 100; background: #0b1220a6; display: flex; align-items: center; justify-content: center; padding: var(--space-4); animation: overlay-in 200ms ease-out; }
+.modal {
+  width: 100%; max-height: calc(100dvh - 2rem); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
+  box-shadow: var(--shadow-overlay); border: none;
+  animation: modal-in 260ms var(--ease-out);
+  transition: transform 220ms var(--ease-out);
+}
+.modal.is-dragging { transition: none; }
+.modal-overlay.is-closing { pointer-events: none; animation: overlay-out 180ms ease-in forwards; }
+.modal-overlay.is-closing .modal { animation: modal-out 180ms ease-in forwards; }
+@keyframes overlay-in { from { background-color: transparent; } }
+@keyframes overlay-out { to { background-color: transparent; } }
+@keyframes modal-in { from { opacity: 0; transform: translateY(12px) scale(0.97); } }
+@keyframes modal-out { to { opacity: 0; transform: translateY(8px) scale(0.97); } }
+@keyframes sheet-in { from { transform: translateY(100%); } }
+@keyframes sheet-out { to { transform: translateY(100%); } }
+.modal-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-5); }
+.day-nav { flex: none; flex-wrap: nowrap; gap: 2px; }
+/* Sideways swipes move between days; the page still scrolls up and down. */
+.modal:has(.day-pane), .calendar { touch-action: pan-y; }
 .modal-head h2 { font-size: var(--text-xl); font-weight: 800; line-height: 1; letter-spacing: -0.02em; }
 /* Pinned to the bottom of the scrolling modal so Save is always in reach. */
 .modal-actions {
@@ -673,7 +691,14 @@ textarea.input { resize: vertical; line-height: 1.45; }
 
   /* Modals become bottom sheets. */
   .modal-overlay { padding: 0; align-items: flex-end; }
-  .modal { max-height: 94dvh; max-width: none !important; border-radius: var(--radius-panel) var(--radius-panel) 0 0; }
+  .modal { max-height: 94dvh; max-width: none !important; border-radius: var(--radius-panel) var(--radius-panel) 0 0; animation-name: sheet-in; animation-duration: 320ms; }
+  .modal-overlay.is-closing .modal { animation-name: sheet-out; animation-duration: 220ms; }
+  /* Grab handle: drag the header down to close. */
+  .modal-head { position: relative; touch-action: none; }
+  .modal-head::before {
+    content: ''; position: absolute; top: calc(var(--space-5) * -1 + 6px); left: 50%; translate: -50% 0;
+    width: 36px; height: 4px; border-radius: 2px; background: var(--color-border);
+  }
   .login-card { padding: var(--space-6); }
 }
 @media (max-width: 480px) {

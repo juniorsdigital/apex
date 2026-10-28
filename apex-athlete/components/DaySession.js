@@ -2,7 +2,8 @@
 // details a tap away. Most days have one session; doubles (a ride and a lift,
 // or a ride split in two) list each session with the break between them.
 import { kindById, plannedHours, formatHours } from '../lib/plan.js'
-import { esc, formatDate, openModal } from '../lib/util.js'
+import { esc, formatDate, openModal, toast, dateKey, parseKey, addDays } from '../lib/util.js'
+import { slidePane, snapBack, swipeable } from '../lib/motion.js'
 import { renderJournalForm, WORKOUT_FEEL } from './JournalForm.js'
 
 /** Chip for a day or a session. Strength wears a square dot, so it reads without colour. */
@@ -137,24 +138,88 @@ export function dayHtml(day, { open = false, entry = null } = {}) {
     </div>`
 }
 
-/** Full day in a modal: the sessions plus that day's journal entry. */
-export function openDayModal(state, date) {
-  const day = state.plan?.byDate[date]
+/**
+ * Full day in a modal: the sessions plus that day's journal entry. Swipe
+ * sideways, use the arrow buttons or the arrow keys to move a day at a time
+ * through the plan.
+ */
+export function openDayModal(state, initialDate) {
+  let date = initialDate
+  let dirty = false
+  const plan = state.plan
+  const first = plan ? (plan.start < initialDate ? plan.start : initialDate) : initialDate
+  const last = plan ? (plan.end > initialDate ? plan.end : initialDate) : initialDate
+  const shift = (key, n) => dateKey(addDays(parseKey(key), n))
+  const canGo = dir => plan ? (dir > 0 ? date < last : date > first) : false
+
   const { el } = openModal(`
     <div class="modal-head">
-      <h2>${formatDate(date, { weekday: 'long', month: 'long', day: 'numeric' })}</h2>
-      <button class="btn btn-ghost btn-icon" data-close aria-label="Close"><i data-lucide="x" aria-hidden="true"></i></button>
+      <h2 aria-live="polite"></h2>
+      <div class="row day-nav">
+        ${plan ? `
+          <button class="btn btn-ghost btn-icon" data-step="-1" aria-label="Previous day"><i data-lucide="chevron-left" aria-hidden="true"></i></button>
+          <button class="btn btn-ghost btn-icon" data-step="1" aria-label="Next day"><i data-lucide="chevron-right" aria-hidden="true"></i></button>` : ''}
+        <button class="btn btn-ghost btn-icon" data-close aria-label="Close"><i data-lucide="x" aria-hidden="true"></i></button>
+      </div>
     </div>
-    <div class="stack">
-      <div id="day-plan">${day ? dayHtml(day, { entry: state.journal[date] }) : `<p class="muted">Nothing planned for this day.</p>`}</div>
+    <div class="stack day-pane">
+      <div id="day-plan"></div>
       <div id="day-journal"></div>
     </div>
   `, { width: 680 })
-  el.querySelector('#day-journal').appendChild(renderJournalForm(state, date))
+  const dialog = el.querySelector('.modal')
+  const pane = el.querySelector('.day-pane')
+
+  const renderPlan = () => {
+    const day = plan?.byDate[date]
+    el.querySelector('#day-plan').innerHTML = day
+      ? dayHtml(day, { entry: state.journal[date] })
+      : `<p class="muted">Nothing planned for this day.</p>`
+  }
+  const render = () => {
+    el.querySelector('h2').textContent = formatDate(date, { weekday: 'long', month: 'long', day: 'numeric' })
+    renderPlan()
+    el.querySelector('#day-journal').replaceChildren(renderJournalForm(state, date))
+    el.querySelectorAll('[data-step]').forEach(btn => { btn.disabled = !canGo(Number(btn.dataset.step)) })
+    dirty = false
+    if (window.lucide) window.lucide.createIcons()
+  }
+
+  const go = dir => {
+    if (!canGo(dir)) return
+    // Moving on would throw away a half-written entry.
+    if (dirty) {
+      toast('Save this entry first, or close it to discard the changes.')
+      snapBack(pane)
+      return
+    }
+    slidePane(pane, dir, () => {
+      date = shift(date, dir)
+      render()
+      dialog.scrollTop = 0
+    })
+  }
+
+  render()
+  pane.addEventListener('input', () => { dirty = true })
+  pane.addEventListener('change', () => { dirty = true })
   // Saving marks the sessions as logged.
-  if (day) el.addEventListener('journal-saved', () => {
-    el.querySelector('#day-plan').innerHTML = dayHtml(day, { entry: state.journal[date] })
+  el.addEventListener('journal-saved', () => {
+    dirty = false
+    renderPlan()
     if (window.lucide) window.lucide.createIcons()
   })
-  if (window.lucide) window.lucide.createIcons()
+  el.addEventListener('click', e => {
+    const btn = e.target.closest('[data-step]')
+    if (btn) go(Number(btn.dataset.step))
+  })
+  const onKey = e => {
+    if (!el.isConnected) return document.removeEventListener('keydown', onKey)
+    if (el.classList.contains('is-closing') || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return
+    if (e.target.closest?.('input, textarea, select')) return
+    e.preventDefault()
+    go(e.key === 'ArrowRight' ? 1 : -1)
+  }
+  document.addEventListener('keydown', onKey)
+  if (plan) swipeable(dialog, { target: () => pane, canGo, onSwipe: go })
 }
