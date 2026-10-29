@@ -664,7 +664,7 @@ textarea.input { resize: vertical; line-height: 1.45; }
 .grocery-group ul { list-style: none; background: var(--color-surface); border: 1px solid var(--color-divider); border-radius: 14px; overflow: hidden; }
 .grocery-group li + li { border-top: 1px solid var(--color-divider); }
 .grocery-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); min-height: 52px; padding: var(--space-2) var(--space-4); cursor: pointer; }
-.grocery-item:hover { background: var(--color-surface-offset); }
+.grocery-item:hover, .grocery-row:hover { background: var(--color-surface-offset); }
 .grocery-item input { position: absolute; opacity: 0; pointer-events: none; }
 .grocery-box {
   display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px;
@@ -674,7 +674,19 @@ textarea.input { resize: vertical; line-height: 1.45; }
 .grocery-box svg { width: 14px; height: 14px; stroke-width: 3; }
 .grocery-item input:checked + .grocery-box { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-primary-ink); }
 .grocery-item input:focus-visible + .grocery-box { outline: 2px solid var(--color-primary); outline-offset: 2px; }
-.grocery-name { display: flex; flex-direction: column; font-weight: 550; }
+.grocery-name { display: flex; flex-direction: column; min-width: 0; font-weight: 550; }
+.grocery-row { display: flex; align-items: flex-start; }
+.grocery-row .grocery-item { flex: 1; min-width: 0; }
+.grocery-note { font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grocery-row.is-open .grocery-note { white-space: normal; overflow: visible; }
+.grocery-more {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 44px; height: 52px; margin-left: calc(var(--space-2) * -1); color: var(--color-text-faint);
+}
+.grocery-more:hover { color: var(--color-text); }
+.grocery-more svg { width: 18px; height: 18px; transition: transform 200ms var(--ease-out); }
+.grocery-row.is-open .grocery-more svg { transform: rotate(180deg); }
+.grocery-row:has(.grocery-more) .grocery-item { padding-right: 0; }
 .grocery-qty { font-size: var(--text-sm); color: var(--color-text-muted); white-space: nowrap; }
 .grocery-item.is-done .grocery-name, .grocery-item.is-done .grocery-qty { text-decoration: line-through; opacity: 0.5; }
 
