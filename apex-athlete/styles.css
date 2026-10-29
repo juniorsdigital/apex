@@ -69,6 +69,9 @@
   /* Strength isn't riding, so it sits outside the intensity scale: slate. */
   --kind-strength: #55627a;
 
+  /* Macros on the Fuel side, always shown with their names. */
+  --macro-protein: #2f7bd6; --macro-carbs: #d29a0f; --macro-fat: #b0479e;
+
   /* The navigation rail stays ink in both themes. */
   --rail-bg:     #172033;
   --rail-text:   #dfe5ef;
@@ -121,6 +124,7 @@
     --chart-z4: #ff8a45; --chart-z5: #f2726a; --chart-z6: #e07bf0; --chart-z7: #a891ff;
 
     --kind-rest: #56627a; --kind-race: #e2ee45; --kind-strength: #aeb9cc;
+    --macro-protein: #6aa8f0; --macro-carbs: #f2c33f; --macro-fat: #e47fcf;
 
     --rail-bg:     #0a0f19;
     --rail-hover:  #151d2d;
@@ -130,6 +134,25 @@
     color-scheme: dark;
   }
 }
+
+/* Fuel, the meals and groceries side: the same paper and ink, with a
+   leafy green taking cobalt's place for action. */
+:root[data-mode="fuel"] {
+  --color-primary:           #157a55;
+  --color-primary-hover:     #0f5f42;
+  --color-primary-highlight: #157a5514;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-mode="fuel"]:not([data-theme="light"]) {
+    --color-primary:           #4fd1a1;
+    --color-primary-hover:     #7fe0bb;
+    --color-primary-highlight: #4fd1a11f;
+  }
+}
+
+/* The Train ⇄ Fuel switch grows the other side out of the button. */
+::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+::view-transition-new(root) { z-index: 2; }
 
 /* ─── BASE ────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -208,6 +231,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   font-size: var(--text-sm); font-weight: 600; white-space: nowrap;
   transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
+a.btn { text-decoration: none; }
 .btn-sm { min-height: 36px; padding: var(--space-1) var(--space-4); font-size: var(--text-xs); }
 .btn-icon { padding: 0; width: 44px; }
 .btn-icon svg { width: 18px; height: 18px; }
@@ -579,6 +603,102 @@ textarea.input { resize: vertical; line-height: 1.45; }
 .login-card h1 { font-size: var(--text-xl); font-weight: 800; line-height: 1; letter-spacing: -0.02em; }
 .login-card form { display: flex; flex-direction: column; gap: var(--space-3); }
 
+/* ─── FUEL ────────────────────────────────────────────────────────────── */
+/* Totals: calories as a big figure, a thin bar per macro. */
+.fuel-totals {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-4) var(--space-10); align-items: center;
+  padding: var(--space-6) var(--space-8); border-radius: var(--radius-panel); background: var(--rail-bg); color: var(--rail-text);
+}
+.fuel-kcal { display: flex; flex-direction: column; }
+.fuel-kcal-num { font-stretch: 125%; font-weight: 850; font-size: clamp(2.8rem, 1.6rem + 4vw, 4.5rem); line-height: 0.9; letter-spacing: -0.03em; color: var(--color-marker); }
+.fuel-kcal-of { margin-top: var(--space-2); font-size: var(--text-sm); color: var(--rail-muted); }
+.macro-bars { list-style: none; display: flex; flex-direction: column; gap: var(--space-3); }
+.macro-bars li { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) 6.5rem; align-items: center; gap: var(--space-3); font-size: var(--text-sm); }
+.macro-name { font-weight: 650; }
+.macro-track { display: block; height: 8px; border-radius: 4px; background: color-mix(in oklab, currentColor 14%, transparent); overflow: hidden; }
+.macro-track > span { display: block; height: 100%; border-radius: 4px; background: var(--macro, var(--color-primary)); transition: width 300ms var(--ease-out); }
+.macro-val { text-align: right; font-weight: 650; }
+.fuel-totals .faint { color: var(--rail-muted); }
+
+.meal-list { list-style: none; display: flex; flex-direction: column; gap: var(--space-2); }
+.meal {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--space-4); align-items: start;
+  padding: var(--space-4) var(--space-5); background: var(--color-surface); border: 1px solid var(--color-divider); border-radius: 14px;
+  transition: opacity var(--transition);
+}
+.meal:not(:has(.meal-check)) { grid-template-columns: minmax(0, 1fr) auto; }
+.meal.is-done .meal-body, .meal.is-done .meal-nums { opacity: 0.55; }
+.meal-check {
+  display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: -4px 0;
+  border-radius: 50%; border: 2px solid var(--color-border); color: transparent;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+}
+.meal-check svg { width: 20px; height: 20px; }
+.meal-check:hover { border-color: var(--color-primary); color: var(--color-text-faint); }
+.meal-check[aria-pressed="true"] { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-primary-ink); }
+.meal-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.meal-when { font-size: var(--text-xs); font-weight: 650; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.meal-name { font-weight: 700; }
+.meal-ingredients { font-size: var(--text-sm); color: var(--color-text-muted); }
+.meal-note { font-size: var(--text-xs); color: var(--color-text-faint); }
+.meal-nums { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-1); text-align: right; }
+.meal-kcal { font-weight: 750; font-stretch: 112%; white-space: nowrap; }
+.meal-macros, .day-macros { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px var(--space-3); font-size: var(--text-xs); color: var(--color-text-muted); }
+.meal-macros > span, .day-macros > span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.meal-macros i, .day-macros i { width: 7px; height: 7px; border-radius: 50%; background: var(--macro); }
+.meal-macros abbr { text-decoration: none; font-weight: 700; }
+.day-macros { justify-content: flex-start; align-items: baseline; gap: var(--space-1) var(--space-4); margin-bottom: var(--space-2); }
+
+.next-shop {
+  display: flex; align-items: center; gap: var(--space-4); width: 100%; padding: var(--space-4) var(--space-5);
+  background: var(--color-primary-highlight); border: 1px solid var(--color-primary); border-radius: 14px;
+}
+.next-shop > svg { flex-shrink: 0; color: var(--color-primary); }
+.next-shop:hover { background: color-mix(in oklab, var(--color-primary) 14%, transparent); }
+.next-shop-body { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+
+.grocery-pane { display: flex; flex-direction: column; gap: var(--space-6); touch-action: pan-y; }
+.grocery-progress { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-4); color: var(--color-text-muted); }
+.grocery-progress b { color: var(--color-text); }
+.grocery-group h2 { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); margin-bottom: var(--space-2); }
+.grocery-group ul { list-style: none; background: var(--color-surface); border: 1px solid var(--color-divider); border-radius: 14px; overflow: hidden; }
+.grocery-group li + li { border-top: 1px solid var(--color-divider); }
+.grocery-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); min-height: 52px; padding: var(--space-2) var(--space-4); cursor: pointer; }
+.grocery-item:hover { background: var(--color-surface-offset); }
+.grocery-item input { position: absolute; opacity: 0; pointer-events: none; }
+.grocery-box {
+  display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px;
+  border-radius: 6px; border: 2px solid var(--color-border); color: transparent;
+  transition: background var(--transition), border-color var(--transition);
+}
+.grocery-box svg { width: 14px; height: 14px; stroke-width: 3; }
+.grocery-item input:checked + .grocery-box { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-primary-ink); }
+.grocery-item input:focus-visible + .grocery-box { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.grocery-name { display: flex; flex-direction: column; font-weight: 550; }
+.grocery-qty { font-size: var(--text-sm); color: var(--color-text-muted); white-space: nowrap; }
+.grocery-item.is-done .grocery-name, .grocery-item.is-done .grocery-qty { text-decoration: line-through; opacity: 0.5; }
+
+.fuel-calendar .cal-day.has-food { background: var(--color-surface); box-shadow: inset 0 3px 0 var(--color-primary); }
+.fuel-calendar .cal-day.is-shop { background: var(--color-primary-highlight); }
+.fuel-calendar .cal-day.empty { cursor: default; }
+.fuel-calendar .cal-type { font-weight: 750; font-stretch: 112%; }
+.cal-unit { font-weight: 500; font-stretch: 100%; opacity: 0.7; font-size: 11px; }
+.cal-shop svg { width: 15px; height: 15px; color: var(--color-primary); }
+
+.shop-callout { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); margin-top: var(--space-2); padding: var(--space-3) var(--space-4); border-radius: var(--radius-control); background: var(--color-primary-highlight); font-size: var(--text-sm); }
+.shop-callout svg { display: inline; vertical-align: -3px; color: var(--color-primary); }
+
+.file-card { display: flex; flex-direction: column; gap: var(--space-4); }
+.file-card.is-over { border-color: var(--color-primary); background: var(--color-primary-highlight); }
+.file-row { display: flex; align-items: center; gap: var(--space-3); }
+.file-row > svg { flex-shrink: 0; width: 28px; height: 28px; color: var(--color-primary); }
+.file-meta { display: flex; flex-direction: column; min-width: 0; }
+.file-meta b { overflow-wrap: anywhere; }
+.csv-guide { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-4); }
+.csv-guide > div { display: grid; grid-template-columns: minmax(0, 15rem) minmax(0, 1fr); gap: var(--space-4); font-size: var(--text-sm); }
+.csv-guide code { font-size: var(--text-xs); font-weight: 650; overflow-wrap: anywhere; }
+.csv-guide dd { color: var(--color-text-muted); }
+
 /* ─── APP SHELL ───────────────────────────────────────────────────────── */
 .app-shell { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); min-height: 100dvh; }
 .app-sidebar {
@@ -592,6 +712,26 @@ textarea.input { resize: vertical; line-height: 1.45; }
 .app-main:focus { outline: none; }
 
 .sidebar-logo { display: flex; align-items: center; gap: var(--space-3); padding: 0 var(--space-5); height: 76px; font-size: var(--text-lg); font-weight: 800; letter-spacing: -0.01em; }
+.brand-name { flex: 1; display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.brand-mode { font-size: 0.7em; font-weight: 700; color: var(--color-marker); letter-spacing: 0; }
+
+/* Train ⇄ Fuel. On the ink rail and in the phone header. */
+.mode-switch {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; min-height: 36px; padding: 0 var(--space-3) 0 10px;
+  border-radius: var(--radius-chip); background: var(--color-marker); color: var(--color-marker-ink);
+  font-size: var(--text-xs); font-weight: 750; font-stretch: 100%; letter-spacing: 0;
+  transition: transform var(--transition), filter var(--transition);
+}
+.mode-switch svg { width: 16px; height: 16px; }
+.mode-switch:hover { filter: brightness(0.94); }
+.mode-switch:active { transform: scale(0.94); }
+.mode-switch:focus-visible { outline: 2px solid var(--color-marker); outline-offset: 3px; }
+.mode-switch-swap { display: none; }
+.sidebar-switch { padding: 0 var(--space-3) var(--space-3); }
+.sidebar-switch .mode-switch { width: 100%; min-height: 44px; padding: 0 var(--space-4) 0 var(--space-3); gap: var(--space-3); font-size: var(--text-sm); border-radius: var(--radius-control); }
+.sidebar-switch .mode-switch span { flex: 1; text-align: left; }
+.sidebar-switch .mode-switch-swap { display: block; opacity: 0.6; }
+.header-actions { flex-wrap: nowrap; }
 .sidebar-nav { display: flex; flex-direction: column; gap: 2px; padding: var(--space-2) var(--space-3); flex: 1; }
 .sidebar-footer { padding: var(--space-4) var(--space-3); border-top: 1px solid var(--rail-border); display: flex; flex-direction: column; gap: var(--space-2); }
 .sidebar-account { padding: 0 var(--space-3); font-size: var(--text-xs); color: var(--rail-muted); overflow-wrap: anywhere; }
@@ -643,13 +783,21 @@ textarea.input { resize: vertical; line-height: 1.45; }
     background: var(--color-bg); border-bottom: 1px solid var(--color-divider);
   }
   .header-brand { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-lg); font-weight: 800; }
+  .header-brand .brand-mode { color: var(--color-primary); }
+  .fuel-totals { grid-template-columns: 1fr; padding: var(--space-5); }
+  .macro-bars li { grid-template-columns: 4rem minmax(0, 1fr) auto; }
+  .meal { padding: var(--space-3) var(--space-4); gap: var(--space-3); }
+  .csv-guide > div { grid-template-columns: 1fr; gap: 2px; }
+  .fuel-calendar .cal-type { font-size: 11px; }
+  .cal-unit, .cal-shop + .cal-unit { display: none; }
+  .cal-shop svg { width: 12px; height: 12px; }
   .app-main { padding: var(--space-6) var(--space-4) calc(var(--tabbar-height) + var(--space-8) + env(safe-area-inset-bottom)); }
   .stack { gap: var(--space-6); }
   .app-sidebar {
     position: fixed; top: auto; bottom: 0; left: 0; right: 0; height: auto; z-index: 20;
     flex-direction: row; padding: 0 var(--space-2) env(safe-area-inset-bottom);
   }
-  .sidebar-logo, .sidebar-footer { display: none; }
+  .sidebar-logo, .sidebar-footer, .sidebar-switch { display: none; }
   .sidebar-nav { flex-direction: row; padding: var(--space-1) 0; gap: 0; }
   .nav-item { flex: 1; flex-direction: column; gap: 2px; padding: var(--space-1) 0; min-height: calc(var(--tabbar-height) - 8px); font-size: 11px; position: relative; text-align: center; justify-content: center; }
   .nav-item.active { background: transparent; color: var(--rail-text); }
@@ -711,4 +859,11 @@ textarea.input { resize: vertical; line-height: 1.45; }
   .kpi-big { font-size: var(--text-xl); }
   .readiness-row { grid-template-columns: 64px minmax(0, 1fr); }
   .feel-scale { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; }
+  .meal { grid-template-columns: auto minmax(0, 1fr); }
+  .meal-nums { grid-column: 2; flex-direction: row; flex-wrap: wrap; align-items: baseline; justify-content: flex-start; gap: var(--space-1) var(--space-3); }
+  .meal:not(:has(.meal-check)) .meal-nums { grid-column: 1; }
+  .meal:not(:has(.meal-check)) { grid-template-columns: minmax(0, 1fr); }
+  .meal-macros { justify-content: flex-start; }
+  .grocery-progress { grid-template-columns: auto minmax(0, 1fr); }
+  .grocery-progress .btn { grid-column: 1 / -1; justify-self: start; }
 }

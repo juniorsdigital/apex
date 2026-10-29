@@ -4,7 +4,7 @@
 // icons, supabase-js): cache first. Supabase API calls are never cached.
 // Bump VERSION when the list of SHELL files changes.
 
-const VERSION = 'apex-v2'
+const VERSION = 'apex-v3'
 const SHELL = [
   './',
   './index.html',
@@ -14,16 +14,21 @@ const SHELL = [
   './manifest.webmanifest',
   './icons/icon-192.png',
   './lib/motion.js',
+  './lib/nutrition.js',
   './lib/plan.js',
   './lib/store.js',
   './lib/supabase.js',
   './lib/util.js',
   './components/DaySession.js',
+  './components/FuelPlan.js',
+  './components/FuelToday.js',
+  './components/GroceryView.js',
   './components/Header.js',
   './components/JournalForm.js',
   './components/JournalView.js',
   './components/JourneyView.js',
   './components/LoginView.js',
+  './components/NutritionUpload.js',
   './components/PlanUpload.js',
   './components/PlanView.js',
   './components/ProfileView.js',

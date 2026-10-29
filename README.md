@@ -7,7 +7,9 @@ Your road to race day: a training plan, a countdown and a journal. Plain HTML, C
 - **Journal:** how the body is (sleep, energy, legs), how each workout felt, headspace for the next race, and notes, with a trend line.
 - **Journey:** the whole season drawn as a route (planned hours per week, coloured by phase, flags for races), the phases in order and the key days ahead.
 
-Guests can use Today with everything saved in the browser. Signing in (email magic link via Supabase) syncs the plan and journal across devices and opens the other pages.
+- **Fuel:** a sister app for meals and groceries. The yellow **Fuel** switch grows it out of the button; **Train** goes back. Today's meals with calories and macros against the day's target, the grocery list for each shopping trip by aisle, and the whole plan as a calendar, all from a nutrition CSV. Shopping days are the dates the CSV puts grocery rows on, so the interval is whatever you asked for when generating the plan. Format, template and a prompt to generate one: [`docs/nutrition-plan.md`](docs/nutrition-plan.md).
+
+Guests can use Today and Fuel with everything saved in the browser. Signing in (email magic link via Supabase) syncs the plan and journal across devices and opens the other pages.
 
 ## Plan CSV
 
@@ -33,8 +35,9 @@ apex-athlete/          the app (deployed to Vercel as `apexathlete`)
   app.js               state, routing, auth wiring
   config.js            Supabase URL + publishable key
   styles.css
-  lib/                 supabase client, data store (guest/cloud), plan parser, utils
+  lib/                 supabase client, data store (guest/cloud), plan and nutrition parsers, motion, utils
   components/          one file per view, plus shared session, journal form and season route
+  samples/             nutrition plan CSV template
 supabase/schema.sql    tables + row level security
 docs/                  design notes
 ```
