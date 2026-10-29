@@ -1,7 +1,7 @@
 {
   "name": "Apex",
   "short_name": "Apex",
-  "description": "Your road to race day: a training plan, a countdown and a journal.",
+  "description": "Your road to race day: a training plan, a countdown, a journal, and the meals and groceries to fuel it.",
   "id": "./",
   "start_url": "./",
   "scope": "./",

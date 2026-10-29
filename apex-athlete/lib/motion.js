@@ -110,3 +110,28 @@ export function swipeable(el, { target = () => el, canGo = () => true, onSwipe }
   el.addEventListener('touchend', end)
   el.addEventListener('touchcancel', end)
 }
+
+/**
+ * Grow the next screen out of `origin` (the button pressed) as a widening
+ * circle until it covers the old one. Uses view transitions where the browser
+ * has them, so the old screen stays visible underneath; elsewhere the new
+ * screen grows over the page background. `swap` must render synchronously.
+ */
+export function grow(origin, swap) {
+  const r = origin?.isConnected ? origin.getBoundingClientRect() : null
+  const x = r ? r.left + r.width / 2 : innerWidth / 2
+  const y = r ? r.top + r.height / 2 : innerHeight / 2
+  const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y))
+  const clipPath = [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`]
+  const timing = { duration: 560, easing: 'cubic-bezier(0.65, 0, 0.25, 1)' }
+
+  if (reducedMotion()) return swap()
+  if (document.startViewTransition) {
+    const t = document.startViewTransition(swap)
+    t.ready.then(() => document.documentElement.animate({ clipPath }, { ...timing, pseudoElement: '::view-transition-new(root)' }))
+      .catch(() => {})
+    return
+  }
+  swap()
+  document.getElementById('app')?.firstElementChild?.animate?.({ clipPath }, timing)
+}

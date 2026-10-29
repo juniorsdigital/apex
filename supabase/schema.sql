@@ -1,4 +1,4 @@
--- Apex — training plan, journal and readiness schema.
+-- Apex — training plan, journal, readiness and nutrition schema.
 -- (rides is from the earlier ride log; the app no longer reads it.)
 -- Run once in the Supabase SQL editor (or `supabase db push`).
 -- Every table is private to its owner via row level security.
@@ -72,11 +72,23 @@ create table if not exists public.journal (
 -- workout_feel is then the day's average and workout_note every note together.
 alter table public.journal add column if not exists sessions jsonb;
 
+-- Fuel: the nutrition plan CSV as uploaded (meals, groceries, targets), one per
+-- rider, plus what's been ticked off: meals eaten and groceries in the cart,
+-- { "m:2026-11-02:0": true, "g:2026-11-01:3": true }. Loading a new plan clears it.
+create table if not exists public.nutrition_plans (
+  user_id      uuid primary key default auth.uid() references auth.users (id) on delete cascade,
+  file_name    text,
+  csv          text not null check (length(csv) <= 5000000),
+  checks       jsonb not null default '{}'::jsonb,
+  uploaded_at  timestamptz not null default now()
+);
+
 alter table public.profiles  enable row level security;
 alter table public.rides     enable row level security;
 alter table public.readiness enable row level security;
 alter table public.training_plans enable row level security;
 alter table public.journal   enable row level security;
+alter table public.nutrition_plans enable row level security;
 
 drop policy if exists "own profile" on public.profiles;
 create policy "own profile" on public.profiles
@@ -104,6 +116,12 @@ create policy "own plan" on public.training_plans
 
 drop policy if exists "own journal" on public.journal;
 create policy "own journal" on public.journal
+  for all to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+
+drop policy if exists "own nutrition plan" on public.nutrition_plans;
+create policy "own nutrition plan" on public.nutrition_plans
   for all to authenticated
   using ((select auth.uid()) = user_id)
   with check ((select auth.uid()) = user_id);

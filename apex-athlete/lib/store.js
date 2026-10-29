@@ -20,9 +20,9 @@ function pickJournal(entry) {
 function readGuest() {
   try {
     const data = JSON.parse(localStorage.getItem(GUEST_KEY))
-    if (data) return { profile: {}, readiness: {}, journal: {}, plan: null, ...data }
+    if (data) return { profile: {}, readiness: {}, journal: {}, plan: null, nutrition: null, ...data }
   } catch {}
-  return { profile: {}, readiness: {}, journal: {}, plan: null }
+  return { profile: {}, readiness: {}, journal: {}, plan: null, nutrition: null }
 }
 
 function writeGuest(data) {
@@ -36,7 +36,7 @@ function writeGuest(data) {
 
 export function guestDataCount() {
   const g = readGuest()
-  return Object.keys(g.journal).length + Object.keys(g.readiness).length + (g.plan ? 1 : 0)
+  return Object.keys(g.journal).length + Object.keys(g.readiness).length + (g.plan ? 1 : 0) + (g.nutrition ? 1 : 0)
 }
 
 export function clearGuestData() {
@@ -48,8 +48,22 @@ export function createGuestStore() {
     kind: 'guest',
 
     async load() {
-      const { profile, readiness, journal, plan } = readGuest()
-      return { profile, readiness, journal, plan }
+      const { profile, readiness, journal, plan, nutrition } = readGuest()
+      return { profile, readiness, journal, plan, nutrition }
+    },
+
+    // A new nutrition plan starts with nothing ticked off.
+    async saveNutrition(file_name, csv) {
+      const data = readGuest()
+      data.nutrition = { file_name, csv, checks: {}, uploaded_at: new Date().toISOString() }
+      return { data: data.nutrition, error: writeGuest(data) }
+    },
+
+    async saveChecks(checks) {
+      const data = readGuest()
+      if (!data.nutrition) return { error: null }
+      data.nutrition.checks = checks
+      return { error: writeGuest(data) }
     },
 
     async savePlan(file_name, csv) {
@@ -86,6 +100,11 @@ export function createGuestStore() {
 const noSessionsColumn = error => /sessions/.test(error?.message || '') && /column|schema cache/i.test(error.message)
 const withoutSessions = row => { const { sessions, ...rest } = row; return rest }
 
+// Likewise a project set up before the Fuel side has no nutrition_plans table.
+// Training still loads; saving a nutrition plan says what to run.
+const noNutritionTable = error => /nutrition_plans/.test(error?.message || '') && /schema cache|does not exist|relation/i.test(error.message)
+const NUTRITION_SETUP = new Error('your Supabase project has no nutrition_plans table yet. Run supabase/schema.sql again in the SQL editor')
+
 async function upsertJournal(sb, rows) {
   let { error } = await sb.from('journal').upsert(rows, { onConflict: 'user_id,entry_date' })
   if (noSessionsColumn(error)) {
@@ -102,20 +121,22 @@ export function createCloudStore(user) {
 
     async load() {
       const sb = await getClient()
-      const [profile, readiness, journal, plan] = await Promise.all([
+      const [profile, readiness, journal, plan, nutrition] = await Promise.all([
         sb.from('profiles').select('*').eq('id', uid).maybeSingle(),
         sb.from('readiness').select('*').eq('user_id', uid),
         sb.from('journal').select('*').eq('user_id', uid),
-        sb.from('training_plans').select('*').eq('user_id', uid).maybeSingle()
+        sb.from('training_plans').select('*').eq('user_id', uid).maybeSingle(),
+        sb.from('nutrition_plans').select('*').eq('user_id', uid).maybeSingle()
       ])
-      const error = profile.error || readiness.error || journal.error || plan.error
+      const nutritionError = noNutritionTable(nutrition.error) ? null : nutrition.error
+      const error = profile.error || readiness.error || journal.error || plan.error || nutritionError
       const readinessMap = {}
       for (const r of readiness.data || []) {
         readinessMap[r.check_date] = { sleep: r.sleep, energy: r.energy, soreness: r.soreness }
       }
       const journalMap = {}
       for (const j of journal.data || []) journalMap[j.entry_date] = j
-      return { profile: profile.data || {}, readiness: readinessMap, journal: journalMap, plan: plan.data, error }
+      return { profile: profile.data || {}, readiness: readinessMap, journal: journalMap, plan: plan.data, nutrition: nutrition.data, error }
     },
 
     async savePlan(file_name, csv) {
@@ -124,6 +145,20 @@ export function createCloudStore(user) {
         .upsert({ user_id: uid, file_name, csv, uploaded_at: new Date().toISOString() }, { onConflict: 'user_id' })
         .select().single()
       return { data, error }
+    },
+
+    async saveNutrition(file_name, csv) {
+      const sb = await getClient()
+      const { data, error } = await sb.from('nutrition_plans')
+        .upsert({ user_id: uid, file_name, csv, checks: {}, uploaded_at: new Date().toISOString() }, { onConflict: 'user_id' })
+        .select().single()
+      return { data, error: noNutritionTable(error) ? NUTRITION_SETUP : error }
+    },
+
+    async saveChecks(checks) {
+      const sb = await getClient()
+      const { error } = await sb.from('nutrition_plans').update({ checks }).eq('user_id', uid)
+      return { error }
     },
 
     async saveJournal(date, entry) {
@@ -156,6 +191,11 @@ export function createCloudStore(user) {
       const guest = readGuest()
       if (guest.plan) {
         const { error } = await this.savePlan(guest.plan.file_name, guest.plan.csv)
+        if (error) return { error }
+      }
+      if (guest.nutrition) {
+        let { error } = await this.saveNutrition(guest.nutrition.file_name, guest.nutrition.csv)
+        if (!error) ({ error } = await this.saveChecks(guest.nutrition.checks || {}))
         if (error) return { error }
       }
       const journalRows = Object.entries(guest.journal)
