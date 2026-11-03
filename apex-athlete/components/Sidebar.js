@@ -13,6 +13,7 @@ export const NAV = {
   fuel: [
     { id: 'fuel-today',     label: 'Meals',     icon: 'utensils' },
     { id: 'fuel-groceries', label: 'Groceries', icon: 'shopping-basket' },
+    { id: 'fuel-recipes',   label: 'Recipes',   icon: 'chef-hat' },
     { id: 'fuel-plan',      label: 'Plan',      icon: 'calendar-days' }
   ]
 }

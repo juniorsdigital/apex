@@ -2,11 +2,12 @@
 // meals per day, shopping days marked. Tap a day for its meals (and, on a
 // shopping day, that trip's list). Plan files and the CSV format sit below.
 import { renderApp, navigate } from '../app.js'
-import { formatKcal, targetFor, tripFor, MACROS } from '../lib/nutrition.js'
+import { formatKcal, targetFor, tripFor, recipeFor, MACROS } from '../lib/nutrition.js'
 import { esc, dateKey, parseKey, addDays, startOfWeek, formatDate, openModal } from '../lib/util.js'
 import { slideOut, slideIn, swipeable } from '../lib/motion.js'
 import { mealHtml } from './FuelToday.js'
 import { showTrip } from './GroceryView.js'
+import { openRecipe } from './RecipesView.js'
 import { renderNutritionDrop, renderNutritionFiles } from './NutritionUpload.js'
 
 let monthOffset = null  // months from this one; null opens on the plan
@@ -106,6 +107,7 @@ function openFuelDay(state, date) {
   const n = state.nutrition
   const day = n.byDate[date]
   const trip = n.trips.find(t => t.date === date)
+  const preps = (n.preps || []).filter(p => p.date === date)
   const feeds = tripFor(n, date)
   const target = targetFor(n, date)
   const { el, close } = openModal(`
@@ -119,7 +121,11 @@ function openFuelDay(state, date) {
           <b class="tabular">${formatKcal(day.totals.calories)} kcal</b>${target?.calories != null ? `<span class="faint"> of ${formatKcal(target.calories)} target</span>` : ''}
           ${MACROS.filter(m => day.totals[m.id] != null).map(m => `<span style="--macro:${m.color}"><i aria-hidden="true"></i>${m.label} ${Math.round(day.totals[m.id])} g</span>`).join('')}
         </p>
-        <ol class="meal-list">${day.meals.map(m => mealHtml(m, { done: !!state.checks[m.key] })).join('')}</ol>` : '<p class="muted">No meals planned.</p>'}
+        <ol class="meal-list">${day.meals.map(m => mealHtml(m, { done: !!state.checks[m.key], recipe: recipeFor(n, m) })).join('')}</ol>` : '<p class="muted">No meals planned.</p>'}
+      ${preps.map(p => `
+        <div class="shop-callout">
+          <span><i data-lucide="cooking-pot" class="icon-sm" aria-hidden="true"></i> <b>Batch cook</b>${p.time ? ` at ${esc(p.time)}` : ''}: ${p.recipeIds.map(id => n.recipeById[id]?.name).filter(Boolean).map(esc).join(', ')}</span>
+        </div>`).join('')}
       ${trip ? `
         <div class="shop-callout">
           <span><i data-lucide="shopping-basket" class="icon-sm" aria-hidden="true"></i> <b>Shopping day</b>: ${trip.items.length} items for ${formatDate(trip.date, { month: 'short', day: 'numeric' })} to ${formatDate(trip.until, { month: 'short', day: 'numeric' })}</span>
@@ -127,6 +133,10 @@ function openFuelDay(state, date) {
         </div>` : feeds ? `<p class="faint small">Groceries from the ${formatDate(feeds.date, { weekday: 'long', month: 'short', day: 'numeric' })} shop.</p>` : ''}
     </div>
   `, { width: 560 })
+  el.addEventListener('click', e => {
+    const rec = e.target.closest('[data-recipe]')
+    if (rec) { close(); openRecipe(state, rec.dataset.recipe) }
+  })
   el.querySelector('#open-list')?.addEventListener('click', () => {
     close()
     showTrip(trip.date)

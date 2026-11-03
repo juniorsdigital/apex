@@ -15,11 +15,12 @@ import { renderProfile } from './components/ProfileView.js'
 import { renderFuelToday } from './components/FuelToday.js'
 import { renderGroceries } from './components/GroceryView.js'
 import { renderFuelPlan } from './components/FuelPlan.js'
+import { renderRecipes } from './components/RecipesView.js'
 
 // Views a guest can open without signing in.
-export const GUEST_VIEWS = ['today', 'login', 'fuel-today', 'fuel-groceries', 'fuel-plan']
+export const GUEST_VIEWS = ['today', 'login', 'fuel-today', 'fuel-groceries', 'fuel-recipes', 'fuel-plan']
 
-// Two apps in one: Train (the training plan) and Fuel (meals and groceries).
+// Two apps in one: Train (the training plan) and Fuel (meals, groceries, recipes).
 // Fuel's views start with "fuel-"; each mode remembers the page it was on.
 const MODE_KEY = 'apex.mode'
 export const modeOf = view => (view.startsWith('fuel-') ? 'fuel' : 'train')
@@ -178,6 +179,7 @@ export function renderApp() {
     profile: renderProfile,
     'fuel-today': renderFuelToday,
     'fuel-groceries': renderGroceries,
+    'fuel-recipes': renderRecipes,
     'fuel-plan': renderFuelPlan
   }
   const view = (views[state.currentView] || renderToday)(state)
