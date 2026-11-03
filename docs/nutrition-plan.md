@@ -2,13 +2,19 @@
 
 Fuel is the meals and groceries side of Apex. Press **Fuel** (the yellow switch
 in the sidebar, or at the top on a phone) and it grows out of the button; press
-**Train** to go back. It has three pages:
+**Train** to go back. It has four pages:
 
 - **Meals:** today's meals with calories and protein, carbs and fat for each, the
   day's totals against its target, and a tick for each meal you've eaten.
 - **Groceries:** the list for one shopping trip, grouped by aisle, with a tick
   for each item in the cart. It opens on today's trip or the next one. Swipe or
   use the arrows to see other trips.
+- **Recipes:** every recipe in the plan, searchable by name or ingredient and
+  filtered by category, with the next batch cook (its recipes, order of work and
+  shopping total) on top. A recipe opens as a card: time, macros per serving,
+  ingredients you can scale with − and +, and steps you tick off as you cook.
+  Meals that follow a recipe get a **Recipe** button on the Meals page and in the
+  Plan calendar.
 - **Plan:** the whole plan as a calendar (planned calories per day, shopping days
   marked), each day's meals when you tap it, and **Plan files**, where you load
   CSVs and download the template.
@@ -32,7 +38,7 @@ groceries can also be two files loaded together: they're joined into one plan.
 
 | Column | Used by | Meaning |
 |---|---|---|
-| `Type` | all | `Meal` (the default when blank), `Grocery` or `Target` |
+| `Type` | all | `Meal` (the default when blank), `Grocery`, `Target`, `Recipe` or `Prep` |
 | `Date` | all | `YYYY-MM-DD`. Meal: the day it's eaten. Grocery: the shopping day. Target: the day it applies to; leave it blank for the default target |
 | `Meal` | Meal | `Breakfast`, `Lunch`, `Snack`, `Dinner`, `Pre-ride`, `Post-ride`… Meals are listed in file order |
 | `Time` | Meal | Optional, e.g. `07:00` |
@@ -45,6 +51,16 @@ groceries can also be two files loaded together: they're joined into one plan.
 | `Category` | Grocery | The aisle. Lists follow walking order: Produce, Bakery, Meat & Fish, Dairy, Deli, Pantry, Snacks, Drinks, Frozen, Supplements, Household, then anything else |
 | `Covers_Through` | Grocery | Optional last day this trip feeds |
 | `Notes` | all | Shown under the meal or item |
+| `Recipe_ID` | Recipe, Meal, Prep | Recipe: its id (e.g. `R07`). Meal: the recipe it follows (a meal whose `Name` matches a recipe links too). Prep: the recipes cooked, separated by `;` |
+| `Prep_ID` | Prep, Meal | Prep: its id. Meal: the batch cook it comes from |
+| `Servings` | Recipe, Prep | Recipe: how many servings a batch makes (its `Ingredients` are per serving). Prep: portions made |
+| `Active_Min`, `Total_Min` | Recipe, Prep | Hands-on and start-to-finish minutes |
+| `Instructions` | Recipe, Prep | Steps on one line, separated by ` \| `: `1) Heat the oven \| 2) Roast 20 min`. The leading numbers are optional |
+
+**Recipe** rows have no date. **Prep** rows are batch-cooking sessions, dated on
+the day you cook, with `Time`, `Covers_Through` and the session's total
+`Ingredients`. Files without these rows still load; the Recipes page then says
+how to add them.
 
 ```csv
 Type,Date,Meal,Time,Name,Ingredients,Calories,Protein_g,Carbs_g,Fat_g,Fiber_g,Sodium_mg,Quantity,Unit,Category,Covers_Through,Notes

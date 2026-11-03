@@ -1,11 +1,12 @@
 // Fuel · Meals — today's meals with what each one carries, the day's totals
 // against its target, and the next shopping trip. Tick a meal once it's eaten.
 import { navigate, setCheck } from '../app.js'
-import { MACROS, totals, targetFor, currentTrip, formatKcal } from '../lib/nutrition.js'
+import { MACROS, totals, targetFor, currentTrip, nextPrep, recipeFor, formatKcal } from '../lib/nutrition.js'
 import { plannedHours, formatHours } from '../lib/plan.js'
 import { esc, dateKey, formatDate, toast, friendlyError } from '../lib/util.js'
 import { kindChip, sessionTitles } from './DaySession.js'
 import { renderNutritionDrop } from './NutritionUpload.js'
+import { openRecipe } from './RecipesView.js'
 
 export function renderFuelToday(state) {
   const today = dateKey()
@@ -28,6 +29,8 @@ export function renderFuelToday(state) {
   const meals = day ? day.meals : []
   const training = state.plan?.byDate[today]
   const trip = currentTrip(n, today)
+  const prep = nextPrep(n, today)
+  const prepToday = prep && prep.date === today ? prep : null
   const body = document.createElement('div')
   body.className = 'stack'
   wrap.appendChild(body)
@@ -42,12 +45,22 @@ export function renderFuelToday(state) {
           <h2 id="meals-h">Today's meals</h2>
           ${training ? `<span class="row small faint">Training: ${kindChip(training)} ${esc(sessionTitles(training))}${plannedHours(training) ? `, ${formatHours(plannedHours(training))}` : ''}</span>` : ''}
         </div>
-        ${meals.length ? `<ol class="meal-list">${meals.map(m => mealHtml(m, { done: !!state.checks[m.key], checkable: true })).join('')}</ol>` : `
+        ${meals.length ? `<ol class="meal-list">${meals.map(m => mealHtml(m, { done: !!state.checks[m.key], checkable: true, recipe: recipeFor(n, m) })).join('')}</ol>` : `
           <div class="card empty">
             <p>${today < n.start ? `Your nutrition plan starts ${formatDate(n.start, { weekday: 'long', month: 'long', day: 'numeric' })}.` : today > n.end ? 'Your nutrition plan has finished.' : 'No meals planned for today.'}</p>
             <p>${today > n.end ? 'Load the next one from the Plan page when you have it.' : 'Eat to feel, and fuel the ride.'}</p>
           </div>`}
       </section>
+
+      ${prepToday ? `
+        <button class="next-shop is-cook" type="button" id="cook-today">
+          <i data-lucide="cooking-pot" aria-hidden="true"></i>
+          <span class="next-shop-body">
+            <b>Batch cook today${prepToday.time ? ` at ${esc(prepToday.time)}` : ''}</b>
+            <span class="faint small">${prepToday.recipeIds.length} ${prepToday.recipeIds.length === 1 ? 'recipe' : 'recipes'}${prepToday.portions ? `, ${prepToday.portions} portions` : ''}. See the order of work.</span>
+          </span>
+          <i data-lucide="chevron-right" aria-hidden="true"></i>
+        </button>` : ''}
 
       ${trip ? `
         <button class="next-shop" type="button" id="next-shop">
@@ -61,10 +74,13 @@ export function renderFuelToday(state) {
     `
     if (window.lucide) window.lucide.createIcons()
     body.querySelector('#next-shop')?.addEventListener('click', () => navigate('fuel-groceries'))
+    body.querySelector('#cook-today')?.addEventListener('click', () => navigate('fuel-recipes'))
   }
   paint()
 
   body.addEventListener('click', async e => {
+    const rec = e.target.closest('[data-recipe]')
+    if (rec) return openRecipe(state, rec.dataset.recipe)
     const btn = e.target.closest('[data-eat]')
     if (!btn) return
     const key = btn.dataset.eat
@@ -102,8 +118,8 @@ function totalsHtml(eaten, planned, target) {
     </section>`
 }
 
-/** One meal: when, what, what's in it, and its numbers. */
-export function mealHtml(m, { done = false, checkable = false } = {}) {
+/** One meal: when, what, what's in it, and its numbers. `recipe` adds a link to its card. */
+export function mealHtml(m, { done = false, checkable = false, recipe = null } = {}) {
   const macros = MACROS.filter(x => m[x.id] != null)
   return `
     <li class="meal ${done ? 'is-done' : ''}">
@@ -116,6 +132,7 @@ export function mealHtml(m, { done = false, checkable = false } = {}) {
         <span class="meal-name">${esc(m.name)}</span>
         ${m.ingredients.length ? `<span class="meal-ingredients">${m.ingredients.map(esc).join(', ')}</span>` : ''}
         ${m.note ? `<span class="meal-note">${esc(m.note)}</span>` : ''}
+        ${recipe ? `<button type="button" class="meal-recipe" data-recipe="${esc(recipe.id)}"><i data-lucide="chef-hat" aria-hidden="true"></i>Recipe</button>` : ''}
       </div>
       <div class="meal-nums">
         <span class="meal-kcal tabular">${formatKcal(m.calories)}<span class="faint"> kcal</span></span>

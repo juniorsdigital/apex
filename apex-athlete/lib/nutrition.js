@@ -27,8 +27,18 @@ function rowType(r) {
   const t = (r.Type || '').trim().toLowerCase()
   if (/^(groc|shop|buy)/.test(t)) return 'grocery'
   if (/^(target|goal)/.test(t)) return 'target'
+  if (/^recipe/.test(t)) return 'recipe'
+  if (/^(prep|batch)/.test(t)) return 'prep'
   return 'meal'
 }
+
+// "rolled oats 90 g; banana 1" → ['rolled oats 90 g', 'banana 1']
+const list = v => dash(v).split(/\s*;\s*/).filter(Boolean)
+// "1) Heat the oven | 2) Roast…" → ['Heat the oven', 'Roast…']. Steps are
+// separated by " | "; a leading "1)" or "1." is dropped (the list numbers them).
+const steps = v => dash(v).split(/\s+\|\s+/).map(s => s.replace(/^\s*\d+\s*[).:-]\s*/, '').trim()).filter(Boolean)
+const ids = v => dash(v).split(/\s*[;,]\s*/).filter(Boolean)
+const slug = v => String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
 function nutrients(r) {
   return {
@@ -63,9 +73,50 @@ export function parseNutrition(text) {
   const byDate = {}
   const tripsByDate = {}
   const targets = { default: null, byDate: {} }
+  const recipes = []
+  const preps = []
   for (const r of rows) {
     const type = rowType(r)
     const date = r.Date
+    if (type === 'recipe') {
+      const name = r.Name || r.Item
+      if (!name) continue
+      recipes.push({
+        id: dash(r.Recipe_ID) || slug(name),
+        name,
+        slot: dash(r.Meal),
+        category: dash(r.Category) || 'Other',
+        ingredients: list(r.Ingredients),
+        steps: steps(r.Instructions),
+        servings: num(r.Servings ?? r.Quantity),
+        activeMin: num(r.Active_Min),
+        totalMin: num(r.Total_Min),
+        ...nutrients(r),
+        fiber: num(r.Fiber_g),
+        sodium: num(r.Sodium_mg),
+        note: dash(r.Notes),
+        uses: []
+      })
+      continue
+    }
+    if (type === 'prep') {
+      if (!DATE.test(date)) continue
+      preps.push({
+        id: dash(r.Prep_ID) || `prep-${date}-${preps.length}`,
+        date,
+        time: dash(r.Time),
+        name: r.Name || 'Batch cook',
+        recipeIds: ids(r.Recipe_ID),
+        ingredients: list(r.Ingredients),
+        steps: steps(r.Instructions),
+        portions: num(r.Servings ?? r.Quantity),
+        activeMin: num(r.Active_Min),
+        totalMin: num(r.Total_Min),
+        coversThrough: DATE.test(r.Covers_Through) ? r.Covers_Through : '',
+        note: dash(r.Notes)
+      })
+      continue
+    }
     if (type === 'target') {
       if (!date) targets.default = nutrients(r)
       else if (DATE.test(date)) targets.byDate[date] = nutrients(r)
@@ -93,11 +144,13 @@ export function parseNutrition(text) {
       meal: r.Meal || 'Meal',
       time: dash(r.Time),
       name: r.Name || r.Meal || 'Meal',
-      ingredients: dash(r.Ingredients).split(/\s*;\s*/).filter(Boolean),
+      ingredients: list(r.Ingredients),
       ...nutrients(r),
       fiber: num(r.Fiber_g),
       sodium: num(r.Sodium_mg),
-      note: dash(r.Notes)
+      note: dash(r.Notes),
+      recipeId: dash(r.Recipe_ID),
+      prepId: dash(r.Prep_ID)
     })
   }
 
@@ -115,10 +168,52 @@ export function parseNutrition(text) {
     t.groups = groupByAisle(t.items)
   })
 
+  // Recipes by id and by name; each lists the planned days it's eaten on.
+  const recipeById = {}
+  const recipeByName = {}
+  for (const rc of recipes) {
+    recipeById[rc.id] = rc
+    recipeByName[rc.name.toLowerCase()] = rc
+  }
+  for (const d of days) {
+    for (const m of d.meals) {
+      const rc = recipeById[m.recipeId] || recipeByName[m.name.toLowerCase()]
+      if (rc) { m.recipeId = rc.id; rc.uses.push(d.date) }
+    }
+  }
+  preps.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
+
   return {
     days, byDate, trips: tripList, targets, start, end,
+    recipes, recipeById, preps,
     mealCount: days.reduce((a, d) => a + d.meals.length, 0)
   }
+}
+
+/** The recipe a meal follows, or null. */
+export function recipeFor(n, meal) {
+  return (meal?.recipeId && n?.recipeById?.[meal.recipeId]) || null
+}
+
+/** The batch cook to do: today's, else the next one, else null. */
+export function nextPrep(n, today = dateKey()) {
+  return n?.preps?.find(p => p.date >= today) || null
+}
+
+/**
+ * Scale one ingredient line ("rolled oats 90 g", "eggs 2") by a factor. The
+ * last number in the line is the amount; lines without one are left alone.
+ */
+export function scaleIngredient(line, factor) {
+  if (factor === 1) return line
+  const m = line.match(/^(.*?)(\d+(?:\.\d+)?)(\s*[a-zA-Z]*\.?)\s*$/)
+  if (!m) return line
+  const v = parseFloat(m[2]) * factor
+  const unit = m[3].trim()
+  const shown = unit === 'g' || unit === 'ml'
+    ? (v >= 100 ? Math.round(v / 5) * 5 : Math.round(v))
+    : Math.round(v * 4) / 4
+  return `${m[1]}${shown}${m[3]}`
 }
 
 function groupByAisle(items) {
