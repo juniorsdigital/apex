@@ -51,6 +51,81 @@ export function parseCsv(text) {
   return { keys, rows: body.map(r => Object.fromEntries(keys.map((k, i) => [k, (r[i] ?? '').trim()]))) }
 }
 
+/** Rows back to CSV text, quoting only the fields that need it. */
+export function toCsv(keys, rows) {
+  const cell = v => (/[",\r\n]/.test(v ?? '') ? `"${String(v).replace(/"/g, '""')}"` : v ?? '')
+  return [keys, ...rows.map(r => keys.map(k => r[k]))].map(line => line.map(cell).join(',')).join('\n') + '\n'
+}
+
+const ISO = /^\d{4}-\d{2}-\d{2}$/
+// Where a day sits in the season. An update that leaves these columns out keeps
+// them from the plan, so changed days stay in their week and phase.
+const CONTEXT = ['Week', 'Week_Start', 'Phase', 'Week_Type']
+
+/**
+ * Change only some dates of a plan. Every date in the update replaces all of
+ * the plan's rows for that date (so a day can go from one session to two, or
+ * back); dates the plan doesn't have yet are added; every other date is left
+ * as it was. Columns new in the update are added to the plan.
+ * @param {string} baseCsv    the current plan CSV
+ * @param {string} updateCsv  rows for the dates to change or add
+ * @returns {{ csv, replaced: string[], added: string[] } | { error }}
+ */
+export function mergePlanCsv(baseCsv, updateCsv) {
+  if (!updateCsv || !updateCsv.trim()) return { error: 'The file is empty.' }
+  const base = parseCsv(baseCsv || '')
+  const update = parseCsv(updateCsv)
+  const missing = REQUIRED.filter(k => !update.keys.includes(k))
+  if (missing.length) return { error: `This doesn't look like a plan file: it has no ${missing.join(' or ')} column.` }
+
+  const updateRows = update.rows.filter(r => ISO.test(r.Date))
+  if (!updateRows.length) return { error: 'No rows with a date like 2026-10-21 were found.' }
+  const dates = new Set(updateRows.map(r => r.Date))
+
+  const baseRows = base.rows.filter(r => ISO.test(r.Date))
+  const baseDates = new Set(baseRows.map(r => r.Date))
+  const keys = [...base.keys, ...update.keys.filter(k => k && !base.keys.includes(k))]
+
+  // Week, phase and so on for a date: from the plan's row on that date, or from
+  // the plan's week that the date falls in (by Week_Start). A date past the
+  // plan's weeks carries on the phase before it, in 7-day weeks after the last.
+  const WEEK = 7 * 86400000
+  const contextFor = date => {
+    const same = baseRows.find(r => r.Date === date)
+    if (same) return same
+    const t = parseKey(date)
+    const inWeek = baseRows.find(r => ISO.test(r.Week_Start || '') && t >= parseKey(r.Week_Start) && t - parseKey(r.Week_Start) < WEEK)
+    if (inWeek) return inWeek
+    const prev = baseRows.filter(r => r.Date < date).pop() || baseRows[0]
+    if (!prev) return null
+    let weekStart = ''
+    if (ISO.test(prev.Week_Start || '') && t > parseKey(prev.Week_Start)) {
+      const start = parseKey(prev.Week_Start)
+      start.setDate(start.getDate() + 7 * Math.floor(Math.round((t - start) / 86400000) / 7))
+      weekStart = dateKey(start)
+    }
+    return { Phase: prev.Phase, Week_Start: weekStart }
+  }
+  const fill = CONTEXT.filter(k => base.keys.includes(k) && !update.keys.includes(k))
+  const incoming = updateRows.map(r => {
+    const ctx = fill.length ? contextFor(r.Date) : null
+    return { ...r, ...Object.fromEntries(fill.map(k => [k, ctx?.[k] ?? ''])) }
+  })
+
+  // Stable by date, so a day's rows keep their order.
+  const rows = [...baseRows.filter(r => !dates.has(r.Date)), ...incoming]
+    .map((r, i) => [r, i])
+    .sort((a, b) => a[0].Date.localeCompare(b[0].Date) || a[1] - b[1])
+    .map(([r]) => r)
+
+  const sorted = [...dates].sort()
+  return {
+    csv: toCsv(keys, rows),
+    replaced: sorted.filter(d => baseDates.has(d)),
+    added: sorted.filter(d => !baseDates.has(d))
+  }
+}
+
 const dash = v => (v && v !== '-' ? v : '')
 const num = v => (v === '' || v == null || isNaN(Number(v)) ? null : Number(v))
 
