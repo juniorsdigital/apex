@@ -2,7 +2,7 @@
 
 Your road to race day: a training plan, a countdown and a journal. Plain HTML, CSS and ES modules, with no build step.
 
-- **Plan:** load your training plan as a CSV (one row per day, or per session on days with more than one). The app shows today's sessions, a month calendar coloured by type of day, and every day's details: targets, fueling, strength, Plan B and coach notes. When the plan changes, load the new file; it replaces the old one and journal entries are kept.
+- **Plan:** load your training plan as a CSV (one row per day, or per session on days with more than one). The app shows today's sessions, a month calendar coloured by type of day, and every day's details: targets, fueling, strength, Plan B and coach notes. When the plan changes, load the new file; it replaces the old one and journal entries are kept. To change only some days, use **Update dates** with a CSV of just those dates.
 - **Today:** a countdown to the goal race, today's sessions (each one numbered, with the break between them), the next few days, this week, and today's journal.
 - **Journal:** how the body is (sleep, energy, legs), how each workout felt, headspace for the next race, and notes, with a trend line.
 - **Journey:** the whole season drawn as a route (planned hours per week, coloured by phase, flags for races), the phases in order and the key days ahead.
@@ -24,6 +24,10 @@ A day can hold several sessions, listed in order, each logged on its own in the 
 - **A workout written in parts** (`Part 1 ... Part 2 ...`, `Session 1 ... Session 2 ...` or `AM: ... PM: ...`) becomes one session per part. `..., then <break>, Part 2` is shown as the break between them, `Fueling` segments starting `Part 2:` go to that part, and Plan B, bad weather and coach notes are shown once for every part.
 
 Hours are the day's total riding. On those days the journal saves a feel and a note per session in `journal.sessions`, plus the day's average feel in `workout_feel`. Projects set up before this need `supabase/schema.sql` run again (it adds the column); until then the app saves without it.
+
+### Changing only some dates
+
+**Update dates** (on the Plan page, next to **Load new plan**) takes a CSV with just the days that change, in the same format (`Date` and `Workout` needed). Every date in that file replaces all of the plan's rows for that date, so a day can go from one session to two or back. Dates the plan doesn't have yet are added, and every other day stays as it was. Columns that are only in the update are added to the plan. If the update leaves out `Week`, `Week_Start`, `Phase` or `Week_Type`, the changed days keep the plan's values. A date past the end of the plan takes the phase before it. The toast lists what changed and has an **Undo**.
 
 `Day_Type` sets the colour (rest, easy, endurance, threshold, intervals, test, rehearsal, race, strength); on a day with several sessions the hardest one sets it. The goal race is the `NATIONALS` day, or otherwise the last race.
 

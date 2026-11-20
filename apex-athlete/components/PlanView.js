@@ -4,7 +4,7 @@ import { renderApp } from '../app.js'
 import { KINDS, kindById, plannedHours, formatHours } from '../lib/plan.js'
 import { esc, dateKey, parseKey, addDays, startOfWeek, formatDate } from '../lib/util.js'
 import { openDayModal, sessionPips, sessionsLabel } from './DaySession.js'
-import { choosePlanFile, renderPlanDrop } from './PlanUpload.js'
+import { choosePlanFile, choosePlanUpdate, renderPlanDrop } from './PlanUpload.js'
 import { phaseColor } from './SeasonProfile.js'
 import { slideOut, slideIn, swipeable } from '../lib/motion.js'
 
@@ -90,6 +90,7 @@ export function renderPlan(state) {
       </div>
       <div class="row">
         <span class="faint small">${esc(state.planMeta?.file_name || 'Plan')}${state.planMeta?.uploaded_at ? `, loaded ${formatDate(dateKey(new Date(state.planMeta.uploaded_at)), { month: 'short', day: 'numeric' })}` : ''}</span>
+        <button class="btn btn-ghost btn-sm" id="update-plan" title="Load a CSV with only the dates to change; the rest of the plan stays"><i data-lucide="file-diff" class="icon-sm" aria-hidden="true"></i> Update dates</button>
         <button class="btn btn-ghost btn-sm" id="replace-plan"><i data-lucide="file-up" class="icon-sm" aria-hidden="true"></i> Load new plan</button>
       </div>
     </div>
@@ -117,5 +118,6 @@ export function renderPlan(state) {
     if (cell) openDayModal(state, cell.dataset.date)
   })
   wrap.querySelector('#replace-plan').addEventListener('click', choosePlanFile)
+  wrap.querySelector('#update-plan').addEventListener('click', choosePlanUpdate)
   return wrap
 }

@@ -1,6 +1,6 @@
 import { getSessionUser, onAuthStateChange } from './lib/supabase.js'
 import { createGuestStore, createCloudStore } from './lib/store.js'
-import { parsePlan } from './lib/plan.js'
+import { parsePlan, mergePlanCsv } from './lib/plan.js'
 import { parseNutrition } from './lib/nutrition.js'
 import { esc, refreshIcons } from './lib/util.js'
 import { enterPage, grow } from './lib/motion.js'
@@ -37,6 +37,7 @@ export const state = {
   journal: {},
   plan: null,        // parsed plan (see lib/plan.js), or null
   planMeta: null,    // { file_name, uploaded_at }
+  planCsv: '',       // the plan as saved, so an update can be merged into it
   nutrition: null,   // parsed nutrition plan (see lib/nutrition.js), or null
   nutritionMeta: null,
   checks: {},        // meals eaten and groceries in the cart, by key
@@ -74,6 +75,7 @@ function applyPlan(row) {
   const parsed = row?.csv ? parsePlan(row.csv) : null
   state.plan = parsed && !parsed.error ? parsed : null
   state.planMeta = row ? { file_name: row.file_name, uploaded_at: row.uploaded_at } : null
+  state.planCsv = state.plan ? row.csv : ''
 }
 
 function applyNutrition(row) {
@@ -103,6 +105,21 @@ export async function savePlan(fileName, csv) {
   applyPlan(data)
   renderApp()
   return { plan: state.plan }
+}
+
+/**
+ * Change only the dates in `csv` (see mergePlanCsv): those days are replaced or
+ * added and the rest of the plan stays. Returns { plan, replaced, added, undo }
+ * or { error }; undo() puts the plan back as it was.
+ */
+export async function updatePlan(fileName, csv) {
+  if (!state.plan) return savePlan(fileName, csv)
+  const before = { file_name: state.planMeta?.file_name || fileName, csv: state.planCsv }
+  const merged = mergePlanCsv(before.csv, csv)
+  if (merged.error) return { error: new Error(merged.error) }
+  const result = await savePlan(before.file_name, merged.csv)
+  if (result.error) return result
+  return { ...result, replaced: merged.replaced, added: merged.added, undo: () => savePlan(before.file_name, before.csv) }
 }
 
 /** Validate and save a nutrition CSV. Returns { error } with a sentence on failure. */
